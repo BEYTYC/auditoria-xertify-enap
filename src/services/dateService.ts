@@ -154,9 +154,11 @@ export function parseAnyDate(raw: unknown): ParsedDate | null {
     return isValidCalendarDate(parts.year, parts.month, parts.day) ? parts : null;
   }
 
-  // Español: "15 de mayo de 1990" / "15 mayo 1990" / "15-mayo-1990"
+  // Español: "15 de mayo de 1990" / "15 mayo 1990" / "15-mayo-1990".
+  // El año también admite el contraído «del» («...mayo del 1990»), aunque el
+  // formato exigido siempre lo escribe con «de».
   const spanish = text.match(
-    /^(\d{1,2})\s*(?:de\s+|[-/.\s])\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)\.?\s*(?:de\s+|[-/.\s])\s*(\d{4})$/i,
+    /^(\d{1,2})\s*(?:del?\s+|[-/.\s])\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)\.?\s*(?:del?\s+|[-/.\s])\s*(\d{4})$/i,
   );
   if (spanish) {
     const [, d, monthWord, y] = spanish;
@@ -311,11 +313,18 @@ export interface ParsedRange {
 /** Separadores admitidos entre las dos fechas de un rango. */
 const RANGE_SEPARATOR = /\s+(?:al|a|hasta)\s+|\s+[-–—]\s+/i;
 
+/** Quita el artículo con que a veces se abre cada extremo: «del 31 de agosto». */
+function stripLeadingArticle(text: string): string {
+  return text.replace(/^(?:del|el)\s+/i, '');
+}
+
 /**
  * Interpreta un rango. Acepta que el mes o el año aparezcan una sola vez:
  *   «12 al 15 de junio de 2026»
  *   «12 de junio al 4 de julio de 2026»
  *   «12 de diciembre de 2025 al 4 de enero de 2026»
+ *   «del 31 de agosto al 4 de septiembre de 2026» (el «del» inicial se ignora
+ *    al interpretar, pero el formato exigido nunca lo lleva)
  * Devuelve `null` si el texto no es un rango reconocible.
  */
 export function parseDateRange(raw: unknown): ParsedRange | null {
@@ -325,7 +334,7 @@ export function parseDateRange(raw: unknown): ParsedRange | null {
   const parts = text.split(RANGE_SEPARATOR);
   if (parts.length !== 2) return null;
 
-  const [left, right] = parts.map((part) => collapseSpaces(part));
+  const [left, right] = parts.map((part) => stripLeadingArticle(collapseSpaces(part)));
   if (!left || !right) return null;
 
   // El extremo derecho siempre está completo: de ahí salen el mes y el año
@@ -354,33 +363,35 @@ export function parseDateRange(raw: unknown): ParsedRange | null {
  *   mismo mes y año  → «12 al 15 de junio de 2026»
  *   mismo año        → «12 de junio al 4 de julio de 2026»
  *   distinto año     → «12 de diciembre de 2025 al 4 de enero de 2026»
+ *
+ * El separador exigido por la institución es «al» —es lo que propone
+ * «Corregir»—; ver `isCanonicalSpanishRange`, que ya no acepta «a» como
+ * variante correcta.
  */
-export function formatSpanishRange(range: ParsedRange): string {
+export function formatSpanishRange(range: ParsedRange, separator: 'a' | 'al' = 'al'): string {
   const { start, end } = range;
 
-  // El separador es «a», no «al»: «2 de septiembre a 5 de octubre de 2025».
   if (start.year === end.year && start.month === end.month) {
-    return `${start.day} a ${end.day} de ${MONTHS_ES[start.month - 1]} de ${start.year}`;
+    return `${start.day} ${separator} ${end.day} de ${MONTHS_ES[start.month - 1]} de ${start.year}`;
   }
   if (start.year === end.year) {
-    return `${start.day} de ${MONTHS_ES[start.month - 1]} a ${formatSpanish(end)}`;
+    return `${start.day} de ${MONTHS_ES[start.month - 1]} ${separator} ${formatSpanish(end)}`;
   }
-  return `${formatSpanish(start)} a ${formatSpanish(end)}`;
+  return `${formatSpanish(start)} ${separator} ${formatSpanish(end)}`;
 }
 
 /**
- * `true` si el texto ya está escrito como el rango canónico.
- *
- * El `de` antes del año final es opcional: «19 de febrero al 9 de mayo 2026»
- * y «19 de febrero al 9 de mayo de 2026» se consideran igual de correctos, y
- * no tiene sentido marcar como error una diferencia que nadie percibe.
+ * `true` si el texto ya está escrito como el rango canónico: con «al» como
+ * separador —es la forma que exige la institución, «a» ya no se acepta— y
+ * con el `de` antes del año final opcional («...9 de mayo 2026» vale igual
+ * que «...9 de mayo de 2026»).
  */
 export function isCanonicalSpanishRange(text: string): boolean {
   const range = parseDateRange(text);
   if (!range) return false;
 
-  const canonical = formatSpanishRange(range);
-  const sinDeFinal = canonical.replace(/ de (\d{4})$/, ' $1');
   const actual = text.trim();
+  const canonical = formatSpanishRange(range, 'al');
+  const sinDeFinal = canonical.replace(/ de (\d{4})$/, ' $1');
   return actual === canonical || actual === sinDeFinal;
 }

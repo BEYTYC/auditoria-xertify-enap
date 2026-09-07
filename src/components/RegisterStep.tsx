@@ -9,6 +9,7 @@ import {
   BookOpen,
   CheckCircle2,
   CloudOff,
+  ExternalLink,
   FileSpreadsheet,
   Loader2,
   ShieldAlert,
@@ -31,6 +32,9 @@ import { SelloDeAgua } from './Escudo';
 
 /** La demo publicada corre dentro de un visor que no permite descargar archivos. */
 const IS_DEMO = import.meta.env.VITE_DEMO === '1';
+
+/** Generador de certificados de Xertify, donde se carga el archivo corregido. */
+const XERTIFY_GENERATOR_URL = 'https://generador.xertify.co/';
 
 interface RegisterStepProps {
   preview: RegistrationPreview | null;
@@ -116,7 +120,10 @@ function Confirmation({
             label="Nacionalidad"
             value={`${receipt.stats.totalColombianos} colombianos · ${receipt.stats.totalExtranjeros} extranjeros`}
           />
-          <Detail label="Total registros corregidos" value={String(receipt.stats.erroresManuales)} />
+          <Detail
+            label="Total registros corregidos"
+            value={String(receipt.stats.erroresAuto + receipt.stats.erroresManuales)}
+          />
         </dl>
       </section>
 
@@ -154,27 +161,27 @@ function Confirmation({
 
       {error && !duplicado && <Notice tone="error">{error}</Notice>}
 
-      {/* La firma del asiento, justo debajo del resumen que se acaba de leer. */}
-      <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={onRegister}
-          disabled={!listo || !!loading}
-          title={
-            listo
-              ? 'Anexa una fila por graduado al final de Tabla3, sin sobrescribir nada.'
-              : 'Complete la facultad y el responsable antes de asentar el registro.'
-          }
-          className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 px-9 py-4 text-base font-semibold text-white shadow-lg shadow-emerald-900/25 ring-1 ring-inset ring-white/20 transition hover:from-emerald-600 hover:to-emerald-400 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:ring-0"
-        >
-          {loading ? (
-            <Loader2 size={20} className="animate-spin" />
-          ) : (
-            <ShieldCheck size={20} />
-          )}
-          {loading ?? (duplicado ? 'Este lote ya fue registrado' : 'Generar registro oficial')}
-        </button>
-      </div>
+      {/* Si el lote ya está duplicado, no tiene caso ofrecer el botón de
+          registrar —ni siquiera deshabilitado—: la única acción que queda es
+          ir a la bitácora, y esa ya está en el aviso de arriba. */}
+      {!duplicado && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={onRegister}
+            disabled={!listo || !!loading}
+            title={
+              listo
+                ? 'Anexa una fila por graduado al final de Tabla3, sin sobrescribir nada.'
+                : 'Complete la facultad y el responsable antes de asentar el registro.'
+            }
+            className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 px-9 py-4 text-base font-semibold text-white shadow-lg shadow-emerald-900/25 ring-1 ring-inset ring-white/20 transition hover:from-emerald-600 hover:to-emerald-400 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:ring-0"
+          >
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <ShieldCheck size={20} />}
+            {loading ?? 'Generar registro oficial'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -206,7 +213,7 @@ function Receipt({
       animate={{ opacity: 1, y: 0 }}
       className="mx-auto w-full max-w-[1120px]"
     >
-      {/* Un solo documento: membrete, encabezado del asiento, datos y entrega
+      {/* Un solo documento: membrete, encabezado del registro, datos y entrega
           del archivo, todo sobre el sello de la Escuela. */}
       <div className="card overflow-hidden">
         <div className={['relative overflow-hidden bg-white', ok ? '' : 'bg-amber-50'].join(' ')}>
@@ -276,6 +283,15 @@ function Receipt({
                   <FileSpreadsheet size={15} />
                   Descargar de nuevo
                 </button>
+                <a
+                  href={XERTIFY_GENERATOR_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-secondary"
+                >
+                  <ExternalLink size={15} />
+                  Cargar en Xertify
+                </a>
                 <button type="button" className="btn-ghost ml-auto" onClick={onReset}>
                   Auditar otro lote
                 </button>

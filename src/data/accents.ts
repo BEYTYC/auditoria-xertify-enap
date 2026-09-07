@@ -78,6 +78,7 @@ export const ACCENT_NAMES: Record<string, string> = {
  "FANDINO": "FANDIÑO",
  "FARFAN": "FARFÁN",
  "FERNANDEZ": "FERNÁNDEZ",
+ "GAITAN": "GAITÁN",
  "GARCIA": "GARCÍA",
  "GARZON": "GARZÓN",
  "GERMAN": "GERMÁN",
@@ -203,7 +204,24 @@ export const ACCENT_NAMES: Record<string, string> = {
  "VIZCAINO": "VIZCAÍNO",
  "YANEZ": "YÁÑEZ",
  "ZANGUNA": "ZANGUÑA",
- "ZUNIGA": "ZÚÑIGA"
+ "ZUNIGA": "ZÚÑIGA",
+ "ARBELAEZ": "ARBELÁEZ",
+ "ARISTIZABAL": "ARISTIZÁBAL",
+ "AVILA": "ÁVILA",
+ "BALCAZAR": "BALCÁZAR",
+ "BERMUDEZ": "BERMÚDEZ",
+ "BERRIO": "BERRÍO",
+ "BOHORQUEZ": "BOHÓRQUEZ",
+ "GUARIN": "GUARÍN",
+ "HINCAPIE": "HINCAPIÉ",
+ "MARQUEZ": "MÁRQUEZ",
+ "MOGOLLON": "MOGOLLÓN",
+ "PABON": "PABÓN",
+ "ROLDAN": "ROLDÁN",
+ "SEPULVEDA": "SEPÚLVEDA",
+ "SUESCUN": "SUESCÚN",
+ "USUGA": "ÚSUGA",
+ "VARON": "VARÓN"
 };
 
 /** Municipios y lugares de expedición (88 palabras). */

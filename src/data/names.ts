@@ -251,6 +251,27 @@ export const ACCENT_DICTIONARY: Record<string, string> = {
 export const AMBIGUOUS_ACCENTS = new Set<string>(['cristian', 'martin', 'cortes', 'ramos']);
 
 /**
+ * Nombres y apellidos que NUNCA llevan tilde —son monosílabos («Ruiz»,
+ * «Luis», «Cruz»: el diptongo «ui» no se acentúa salvo que rompa el
+ * diptongo, cosa que ninguno de estos hace)—, pero que se escriben mal con
+ * frecuencia («Ruíz», «Luís», «Crúz»). `canonicalName` quita la tilde
+ * cuando aparece en alguna de estas palabras; el resto del diccionario solo
+ * restituye tildes que faltan, nunca retira una que sobra, así que estas
+ * son la única excepción y deben mantenerse cortas y bien verificadas.
+ */
+export const NEVER_ACCENTED = new Set<string>(['ruiz', 'luis', 'cruz']);
+
+/**
+ * Siglas de dos letras que anteceden al nombre de un firmante civil (no
+ * militar), como «DO» (Doctor/Doctora). Se protegen con la misma prioridad
+ * que `MILITARY_RANKS` en `canonicalName`, ANTES de comprobar si la palabra
+ * es un conector de apellidos (`NAME_CONNECTORS` incluye «do» como partícula
+ * de apellido portugués), porque si no la sigla civil se confunde con ese
+ * conector y pierde la mayúscula: «DO Olga Macías» quedaría «Do Olga Macías».
+ */
+export const CIVILIAN_TITLES = new Set<string>(['DO']);
+
+/**
  * Apellidos donde `n` y `ñ` corresponden a DOS apellidos distintos y reales,
  * no a un descuido de digitación. En estos la app propone la grafía con ñ
  * pero nunca la aplica sola: el nombre de una persona en un certificado no se
@@ -290,9 +311,11 @@ export const AMBIGUOUS_ENYE = new Set<string>([
  * para levantar a mayúscula un grado que vino en minúscula («ca» → «CA»).
  */
 export const MILITARY_RANKS = new Set<string>([
-  // Armada
+  // Armada — oficial naval
   'AL', // Almirante
+  'ALM', // Almirante
   'VA', // Vicealmirante
+  'VALM', // Vicealmirante
   'CA', // Contralmirante
   'CN', // Capitán de Navío
   'CF', // Capitán de Fragata
@@ -303,11 +326,21 @@ export const MILITARY_RANKS = new Set<string>([
   // Infantería de Marina y equivalentes
   'BG', // Brigadier General
   'CR', // Coronel
-  'TC', // Teniente Coronel
+  'TC', // Teniente Coronel / Teniente de Corbeta (según el cargo)
   'MY', // Mayor
   'CT', // Capitán
   'TE', // Teniente
   'ST', // Subteniente
+  // Infantería de Marina — equivalencias con sufijo «CIM»
+  'ALMCIM', // Almirante
+  'VALMCIM', // Vicealmirante
+  'CACIM', // Contralmirante
+  'CRCIM', // Capitán de Navío
+  'TCCIM', // Capitán de Fragata
+  'MYCIM', // Capitán de Corbeta
+  'CCIM', // Teniente de Navío
+  'TCIM', // Teniente de Fragata
+  'STCIM', // Teniente de Corbeta
   // Suboficiales
   'SM', // Suboficial Mayor
   'SJ', // Sargento Jefe
@@ -320,3 +353,29 @@ export const MILITARY_RANKS = new Set<string>([
   'MP', // Marinero Primero
   'MR', // Marinero
 ]);
+
+/**
+ * Jerarquía de los firmantes del certificado: Oficial Naval e Infantería de
+ * Marina, de mayor a menor antigüedad. El firmante 1 debe ser de menor
+ * jerarquía (número más alto) que el firmante 2.
+ */
+export const RANK_SENIORITY: Record<string, number> = {
+  ALM: 1,
+  ALMCIM: 1,
+  VALM: 2,
+  VALMCIM: 2,
+  CA: 3,
+  CACIM: 3,
+  CN: 4,
+  CRCIM: 4,
+  CF: 5,
+  TCCIM: 5,
+  CC: 6,
+  MYCIM: 6,
+  TN: 7,
+  CCIM: 7,
+  TF: 8,
+  TCIM: 8,
+  TC: 9,
+  STCIM: 9,
+};

@@ -11,12 +11,14 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
+import { strFromU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { autoFixAll, computeMetrics, revalidate } from './correctorService';
 import { buildDatabaseRows } from './databaseService';
 import { buildCorrectedWorkbook, readTemplate, type ParsedTemplate } from './excelService';
 import { allocate } from './numberingService';
+import { annotateTemplate } from './xlsxPatchService';
 import type { StudentRow } from '../types';
 
 const FIXTURE = fileURLToPath(new URL('./__fixtures__/plantilla-sucia.xlsx', import.meta.url));
@@ -96,19 +98,22 @@ describe('auditoría de extremo a extremo', () => {
     expect(duplicated).toHaveLength(2);
   });
 
-  it('exige pasaporte para la estudiante española y la peruana', () => {
+  it('acepta el documento propio de la estudiante española y la peruana, sin exigir pasaporte', () => {
+    // «Spain - id» y «Perú - DNI» son el documento de identidad que cada país
+    // ofrece en la lista Xertify: ya no se fuerza a pasaporte.
     const spanish = rows[1].cells.tipodocumento.issues.map((issue) => issue.code);
     const peruvian = rows[2].cells.tipodocumento.issues.map((issue) => issue.code);
-    expect(spanish).toContain('DOC.EXTRANJERO_SIN_PASAPORTE');
-    expect(peruvian).toContain('DOC.EXTRANJERO_SIN_PASAPORTE');
+    expect(spanish).toEqual([]);
+    expect(peruvian).toEqual([]);
   });
 
-  it('rechaza folio y registro por encima de 99', () => {
+  it('libro, folio y registro deben venir vacíos: los asigna la Oficina de Estadística', () => {
     const codes = [
+      ...rows[2].cells.li.issues.map((issue) => issue.code),
       ...rows[2].cells.fo.issues.map((issue) => issue.code),
       ...rows[2].cells.numre.issues.map((issue) => issue.code),
     ];
-    expect(codes.filter((code) => code === 'LEDGER.FUERA_RANGO')).toHaveLength(2);
+    expect(codes.filter((code) => code === 'LEDGER.DEBE_VENIR_VACIO')).toHaveLength(3);
   });
 
   it('la autocorrección arregla lo determinista y deja el resto visible', () => {
@@ -120,23 +125,25 @@ describe('auditoría de extremo a extremo', () => {
     expect(after[0].cells.nombres.value).toBe('José Hernández');
     expect(after[0].cells.apellidos.value).toBe('González Torres');
     expect(after[0].cells.numerodocumento.value).toBe('1.026.286.605');
-    expect(after[0].cells.lugarexpedicion.value).toBe('Bogotá D.C');
+    expect(after[0].cells.lugarexpedicion.value).toBe('Bogotá D.C.');
     expect(after[0].cells.tipodocumento.value).toBe('Colombia - Cédula de ciudadanía');
     expect(after[0].cells.docformato.value).toBe('cédula de ciudadanía');
     expect(after[0].cells.fechaexpedicion.value).toBe('5 de mayo de 2010');
     expect(after[0].cells.fechanacimiento2.value).toBe('15 de mayo de 1990');
 
-    expect(after[1].cells.tipodocumento.value).toBe('Spain - Passport');
+    // «Spain - id» ya es su documento propio: no se toca.
+    expect(after[1].cells.tipodocumento.value).toBe('Spain - id');
     expect(after[1].cells.numerodocumento.value).toBe('A123456');
     expect(after[1].cells.lugarexpedicion.value).toBe('Floridablanca');
     expect(after[1].cells.nombres.value).toBe('María Sofía');
     expect(after[1].cells.apellidos.value).toBe('Pérez de la Rosa');
 
-    expect(after[2].cells.tipodocumento.value).toBe('Perú - Pasaporte');
-    expect(after[2].cells.docformato.value).toBe('pasaporte');
+    // «Perú - DNI» también es su documento propio: tampoco se fuerza a pasaporte.
+    expect(after[2].cells.tipodocumento.value).toBe('Perú - DNI');
     expect(after[2].cells.lugarexpedicion.value).toBe('Ibagué');
-    // `lugarexpi` no alimenta nada: se conserva tal cual, sin tocar.
-    expect(after[2].cells.lugarexpi.value).toBe('cucuta');
+    // `lugarexpi` no alimenta la Base de Datos, pero igual se le revisa la
+    // ortografía, igual que a `lugarexpedicion`.
+    expect(after[2].cells.lugarexpi.value).toBe('Cúcuta');
     expect(after[2].cells.fechainicio.value).toBe('12 de enero de 2026');
     expect(after[2].cells.fechaemite.value).toBe('1 de julio de 2026');
     expect(after[2].cells.nombres.value).toBe('Ana Lucía');
@@ -208,10 +215,81 @@ describe('salidas del lote', () => {
     // La cédula sale de la plantilla como texto con puntos y entra a la base
     // como número: el separador lo pone el formato `#,##0` de la columna.
     expect(dbRows[0]['DOCUMENTO DE IDENTIDAD']).toBe(1026286605);
+    // `TIPO DE DOC` sale de `docformato` (que en esta fila ya traía
+    // «pasaporte» en la plantilla sucia), no de si `tipodocumento` se corrigió.
     expect(dbRows[1]['TIPO DE DOC']).toBe('PS');
     expect(dbRows[3]['TIPO DE DOC']).toBe('TI');
     expect(
       dbRows.every((row) => String(row['OFICINA RESPONSABLE'] ?? '').startsWith('DICSH')),
     ).toBe(true);
+  });
+});
+
+describe('plantilla con las novedades marcadas (sin corregir nada)', () => {
+  it('resalta en amarillo y comenta cada celda con novedad, sin cambiar ningún valor', async () => {
+    const parsed = await loadFixture();
+    const rows = revalidate(parsed.rows, parsed.activeFields);
+
+    const blob = annotateTemplate(parsed.buffer, rows, {
+      sheetName: parsed.sheetName,
+      mappings: parsed.map.mappings,
+    });
+    const files = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+
+    // El valor de la primera celda sucia («jose  hernandez», con espacios de
+    // más) sigue intacto: la plantilla que se descarga no corrige nada.
+    const sheet = strFromU8(files['xl/worksheets/sheet1.xml']);
+    expect(sheet).toContain('JOSE  HERNANDEZ');
+
+    // Cada celda con novedad quedó con un estilo distinto al que traía
+    // (el clon amarillo), y el comentario existe con el mensaje de la regla.
+    expect(sheet).toMatch(/<legacyDrawing r:id="rId\d+"\/>/);
+    const comments = strFromU8(files['xl/comments1.xml']);
+    expect(comments).toContain('Tiene espacios sobrantes');
+    expect(comments).toContain('Documento repetido en las filas');
+
+    // El formato de siempre se conserva: Aptos, `Parameters` oculta, zoom 100 %.
+    expect(strFromU8(files['xl/workbook.xml'])).toMatch(
+      /<sheet\b(?=[^>]*\bname="Parameters")(?=[^>]*\bstate="hidden")[^>]*\/>/,
+    );
+    expect(sheet).toContain('zoomScale="100"');
+    expect(strFromU8(files['xl/styles.xml'])).not.toContain('Calibri');
+  });
+
+  it('dejar bien una celda le quita el amarillo y el comentario en la próxima descarga', async () => {
+    const parsed = await loadFixture();
+    const rows = revalidate(parsed.rows, parsed.activeFields);
+
+    // Simula que el responsable ya corrigió a mano, en Excel, la primera
+    // celda («jose  hernandez» → «José Hernández») y volvió a cargar.
+    const corregido = rows.map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            cells: {
+              ...row.cells,
+              nombres: { ...row.cells.nombres, value: 'José Hernández', original: 'José Hernández' },
+            },
+          }
+        : row,
+    );
+    const revalidated = revalidate(corregido, parsed.activeFields);
+    expect(revalidated[0].cells.nombres.issues).toEqual([]);
+
+    const blob = annotateTemplate(parsed.buffer, revalidated, {
+      sheetName: parsed.sheetName,
+      mappings: parsed.map.mappings,
+    });
+    const files = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+
+    // La app nunca reescribe el valor dentro del Excel: quien corrige es el
+    // responsable, en Excel. Lo que aquí se prueba es que, sin la novedad,
+    // la celda deja de comentarse y de resaltarse en la próxima descarga.
+
+    // Sin la novedad en `nombres`, esa celda ya no aparece en el comentario.
+    const comments = strFromU8(files['xl/comments1.xml']);
+    expect(comments).not.toContain('Tiene espacios sobrantes');
+    // Pero el resto de las novedades del lote —que siguen pendientes— sí.
+    expect(comments).toContain('Documento repetido en las filas');
   });
 });

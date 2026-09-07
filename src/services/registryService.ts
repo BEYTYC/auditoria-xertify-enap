@@ -209,7 +209,7 @@ export async function inspectDestination(config: SharePointConfig): Promise<Tabl
 }
 
 /**
- * Anula un asiento: quita del libro las filas del lote y lo marca en la
+ * Anula un registro: quita del libro las filas del lote y lo marca en la
  * bitácora. El renglón de la bitácora no se borra —la anulación también es
  * historia—; queda con el estado en «REGISTRO ANULADO».
  */

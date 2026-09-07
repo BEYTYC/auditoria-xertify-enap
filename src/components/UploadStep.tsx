@@ -45,7 +45,9 @@ export function UploadStep({ onFile, loading, error }: UploadStepProps) {
           {INSTITUCION.dependencia}
         </p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
-          Auditoría de plantillas y registro de cursos de extensión
+          Auditoría de Plantillas Xertify y
+          <br />
+          Registro de Cursos de Extensión
         </h1>
         <div className="mx-auto mt-2 h-px w-20 bg-gold-500" />
         <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-slate-600">

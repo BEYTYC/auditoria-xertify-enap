@@ -244,14 +244,15 @@ export const DB_ABBREVIATION_ALIASES: Record<string, string> = {
 /**
  * Tipos admitidos con país «Colombia».
  *
- * La cédula de extranjería la expide Colombia al extranjero residente, así que
- * es un documento colombiano válido y se acepta tal cual (va a la base como CE).
+ * La cédula de extranjería NO se acepta: el estudiante extranjero se
+ * identifica con el pasaporte o con el documento de identidad de su propio
+ * país (los que ofrezca la lista Xertify para ese país), nunca con un
+ * documento colombiano de extranjero.
  */
 export const COLOMBIAN_ALLOWED_KINDS = [
   'Cédula de ciudadanía',
   'Tarjeta de identidad',
   'Registro civil',
-  'Cédula de extranjería',
 ];
 
 /** Formas en que la lista Xertify nombra un pasaporte. */

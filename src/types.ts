@@ -362,7 +362,7 @@ export interface LogEntry {
   syncedToSharePoint: boolean;
   /** Filas de Tabla3 generadas, para reexportar el lote si hace falta. */
   rows?: DatabaseRow[];
-  /** `true` si la Oficina de Estadística anuló el asiento en el libro. */
+  /** `true` si la Oficina de Estadística anuló el registro en el libro. */
   anulado?: boolean;
   /** Nombre del archivo corregido que se entregó a la facultad. */
   plantillaNombre?: string;

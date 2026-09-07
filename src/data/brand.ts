@@ -8,11 +8,11 @@
 
 export const INSTITUCION = {
   fuerza: 'Armada de Colombia',
-  nombre: 'Escuela Naval de Cadetes «Almirante Padilla»',
+  nombre: 'Escuela Naval de Cadetes "Almirante Padilla"',
   sigla: 'ENAP',
   dependencia: 'Oficina de Estadística',
-  ciudad: 'Cartagena de Indias D. T. y C.',
-  sistema: 'Registro de Cursos de Extensión',
+  ciudad: 'Cartagena de Indias, D. T. y C.',
+  sistema: 'Auditoría de Plantillas Xertify y Registro de Cursos de Extensión',
   libro: 'Libro de Registro de Cursos de Extensión',
 };
 

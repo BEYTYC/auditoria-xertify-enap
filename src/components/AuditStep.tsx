@@ -1,173 +1,179 @@
 /**
  * AuditStep.tsx
- * Paso 2: filtros, datos del lote y tabla interactiva.
+ * Paso 2: mapeo de columnas y, según el estado del lote, la descarga con las
+ * novedades marcadas o los datos para continuar al registro.
  *
- * Cada hallazgo se corrige uno por uno desde su propia celda: no hay
- * corrección masiva, para que quien valida vea lo que aprueba.
+ * La plantilla no se corrige aquí dentro: cuando hay novedades, la única
+ * acción es descargar la plantilla con cada celda pendiente resaltada en
+ * amarillo y con un comentario de Excel. El responsable corrige ahí y vuelve
+ * a cargar el archivo.
  */
 
-import { ArrowRight, CircleCheck, Columns3, TriangleAlert, WandSparkles } from 'lucide-react';
+import { ArrowRight, CircleCheck, Columns3, Download, TriangleAlert, UploadCloud } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { FIELD_LIST, FIELD_SPECS } from '../data/fields';
 import { OFICINAS_RESPONSABLES, officeLabel, suggestOffice } from '../services/officeService';
+import { canonicalName, startsWithGrado } from '../services/validatorService';
 import type { BatchMetrics } from '../services/correctorService';
-import type {
-  BatchMetadata,
-  CanonicalField,
-  ColumnMapping,
-  RowFilter,
-  StudentRow,
-} from '../types';
-import { AuditTable } from './AuditTable';
+import type { BatchMetadata, CanonicalField, ColumnMapping } from '../types';
+
+/**
+ * Encabezados de una plantilla vieja o mal armada: no existen en el formato
+ * oficial vigente, así que si aparecen hay que bajar la plantilla actual del
+ * Portal Estadístico en vez de intentar mapearlos a mano.
+ */
+const OLD_TEMPLATE_HEADERS = new Set(['fechafin']);
 
 interface AuditStepProps {
-  rows: StudentRow[];
   activeFields: Set<CanonicalField>;
   metrics: BatchMetrics;
   clean: boolean;
-  filter: RowFilter;
   metadata: BatchMetadata;
-  onFilter: (filter: RowFilter) => void;
-  onEdit: (rowId: string, field: CanonicalField, value: string) => void;
-  onRevert: (rowId: string, field: CanonicalField) => void;
-  onRemove: (rowId: string) => void;
   onMetadata: (metadata: BatchMetadata) => void;
   onContinue: () => void;
-  /** Aplica de una vez todas las propuestas del lote. */
-  onAutoFix: () => void;
+  /** Descarga la plantilla con las novedades resaltadas en amarillo y comentadas. */
+  onDownloadAnnotated: () => void;
+  /** Descarta el lote actual y vuelve a la pantalla de carga. */
+  onReload: () => void;
   /** Cómo quedó leída cada columna del archivo. */
   mappings: ColumnMapping[];
   /** Campos obligatorios que ningún encabezado alcanzó a cubrir. */
   missingRequired: CanonicalField[];
   onRemap: (columnIndex: number, field: CanonicalField | null) => void;
+  /** El detalle de qué columna quedó leída como qué campo es cosa de la Oficina. */
+  isAdmin: boolean;
 }
 
 export function AuditStep({
-  rows,
   activeFields,
   metrics,
   clean,
-  filter,
   metadata,
-  onFilter,
-  onEdit,
-  onRevert,
-  onRemove,
   onMetadata,
   onContinue,
-  onAutoFix,
+  onDownloadAnnotated,
+  onReload,
   mappings,
   missingRequired,
   onRemap,
+  isAdmin,
 }: AuditStepProps) {
-  // La tabla es el parte de lo que falta, no un volcado del archivo: solo se
-  // muestran las columnas y las filas que todavía tienen algo que revisar. En
-  // cuanto una fila queda resuelta, sale de la lista y el contador baja.
-  const conNovedad = (cell: { issues: unknown[] }) => cell.issues.length > 0;
-
-  const fields = useMemo(() => {
-    const marcadas = new Set<CanonicalField>();
-    for (const row of rows) {
-      for (const [field, cell] of Object.entries(row.cells)) {
-        if (conNovedad(cell)) marcadas.add(field as CanonicalField);
-      }
-    }
-    return FIELD_LIST.map((spec) => spec.field).filter(
-      (field) => marcadas.has(field) && activeFields.has(field),
-    );
-  }, [rows, activeFields]);
-
-  const filasConNovedad = useMemo(
-    () => rows.filter((row) => Object.values(row.cells).some(conNovedad)),
-    [rows],
-  );
-
-  // El paso al registro exige, además de cero errores, saber quién responde.
-  const listo = clean && Boolean(metadata.oficina) && Boolean(metadata.responsable.trim());
+  // El paso al registro exige, además de cero errores, saber quién responde
+  // y con qué grado firma: el responsable siempre valida con su grado.
+  const listo =
+    clean &&
+    Boolean(metadata.oficina) &&
+    Boolean(metadata.responsable.trim()) &&
+    startsWithGrado(metadata.responsable);
 
   const suggestion = useMemo(
     () => (metadata.curso ? suggestOffice(metadata.curso) : null),
     [metadata.curso],
   );
 
-  // Cuántas filas se tocaron: es lo que se muestra al cerrar el lote.
-  const filasCorregidas = rows.filter((row) =>
-    Object.values(row.cells).some((cell) => cell.value !== cell.original),
-  ).length;
+  // Encabezados que solo existían en una plantilla vieja o mal armada: si
+  // aparece alguno, el problema no es del diligenciamiento sino del archivo
+  // en sí, y no vale la pena seguir auditando hasta que bajen la vigente.
+  const plantillaVieja = mappings.some((mapping) =>
+    OLD_TEMPLATE_HEADERS.has(mapping.header.trim().toLowerCase()),
+  );
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] space-y-4">
-      <ColumnMap
-        mappings={mappings}
-        missingRequired={missingRequired}
-        onRemap={onRemap}
-      />
-
-      <OfficePanel
-        metadata={metadata}
-        suggestion={suggestion}
-        pendientes={metrics.errores}
-        clean={clean}
-        filter={filter}
-        onMetadata={onMetadata}
-        onFilter={onFilter}
-      />
-
-      {/* Cuando ya no queda nada por corregir, el paso siguiente se ofrece
-          aquí mismo, centrado, sin tener que buscarlo. */}
-      {clean && (
-        <div className="flex justify-center pt-1">
-          <button
-            type="button"
-            onClick={onContinue}
-            disabled={!listo}
-            title={
-              listo
-                ? 'El lote quedó en cero errores: continúe al registro oficial.'
-                : 'Complete la facultad y el responsable para continuar.'
-            }
-            className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-navy-800 to-navy-600 px-9 py-4 text-base font-semibold text-white shadow-lg shadow-navy-900/25 ring-1 ring-inset ring-white/15 transition hover:from-navy-700 hover:to-navy-500 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:ring-0"
-          >
-            <CircleCheck size={20} className="text-gold-400 group-disabled:text-slate-400" />
-            Continuar al registro
-            <ArrowRight
-              size={18}
-              className="transition-transform group-hover:translate-x-1 group-disabled:translate-x-0"
-            />
-          </button>
+    <div className="mx-auto max-w-[720px] space-y-4 text-center">
+      {plantillaVieja && (
+        <div className="card flex flex-col items-center gap-2 border-rose-300 bg-rose-50 px-6 py-6">
+          <TriangleAlert className="text-rose-600" size={26} />
+          <p className="text-sm font-semibold text-rose-900">
+            Esta plantilla no es la vigente: trae un encabezado que ya no existe en el formato
+            oficial.
+          </p>
+          <p className="max-w-md text-sm text-rose-800">
+            Descargue la plantilla actual desde el Portal Estadístico (
+            <a
+              href="https://enap.vercel.app"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium underline"
+            >
+              enap.vercel.app
+            </a>
+            ), diligéncienla ahí y vuelva a cargarla.
+          </p>
         </div>
       )}
 
-      {/* Atajo para revisar el lote de un tirón. La auditoría seria se hace
-          celda por celda; esto aplica de una vez todo lo que la máquina puede
-          resolver sola, y deja a la vista lo que exige criterio humano. */}
-      {metrics.autocorregibles > 0 && (
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={onAutoFix}
-            className="inline-flex items-center gap-2 rounded-lg border border-navy-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-400"
-          >
-            <WandSparkles size={15} />
-            Corregir todo
-            <span className="rounded bg-navy-100 px-1.5 text-xs tabular-nums text-navy-800">
-              {metrics.autocorregibles}
-            </span>
-          </button>
-        </div>
+      {isAdmin && (
+        <ColumnMap mappings={mappings} missingRequired={missingRequired} onRemap={onRemap} />
       )}
 
-      <AuditTable
-        rows={filasConNovedad}
-        corregidas={filasCorregidas}
-        llegoLimpia={filasCorregidas === 0}
-        fields={fields}
-        filter={filter}
-        onEdit={onEdit}
-        onRevert={onRevert}
-        onRemove={onRemove}
-      />
+      {!clean ? (
+        <div className="card flex flex-col items-center gap-4 px-6 py-10">
+          <span className="inline-flex rounded-full bg-amber-100 p-3 text-amber-700">
+            <TriangleAlert size={28} />
+          </span>
+          <div>
+            <p className="text-lg font-semibold text-navy-900">
+              {metrics.errores} {metrics.errores === 1 ? 'novedad pendiente' : 'novedades pendientes'}
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
+              Descargue la plantilla: cada celda con una novedad queda en amarillo y con un
+              comentario de Excel explicando qué corregir. Corríjala ahí y vuelva a cargarla.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onDownloadAnnotated}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            >
+              <Download size={16} />
+              Descargar plantilla con las novedades marcadas
+            </button>
+            <button
+              type="button"
+              onClick={onReload}
+              className="inline-flex items-center gap-2 rounded-lg border border-navy-300 bg-white px-4 py-2.5 text-sm font-medium text-navy-800 transition hover:bg-navy-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-400"
+            >
+              <UploadCloud size={16} />
+              Volver a cargar la plantilla
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <OfficePanel metadata={metadata} suggestion={suggestion} onMetadata={onMetadata} />
+
+          <div className="card flex flex-col items-center gap-2 px-6 py-8">
+            <CircleCheck className="text-emerald-600" size={30} />
+            <p className="text-base font-semibold text-navy-900">
+              La plantilla está perfectamente diligenciada.
+            </p>
+            <p className="text-sm text-slate-600">No queda ninguna novedad pendiente.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onContinue}
+              disabled={!listo}
+              title={
+                listo
+                  ? 'El lote quedó en cero errores: continúe al registro oficial.'
+                  : 'Complete la facultad y el responsable para continuar.'
+              }
+              className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-navy-800 to-navy-600 px-9 py-4 text-base font-semibold text-white shadow-lg shadow-navy-900/25 ring-1 ring-inset ring-white/15 transition hover:from-navy-700 hover:to-navy-500 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:ring-0"
+            >
+              <CircleCheck size={20} className="text-gold-400 group-disabled:text-slate-400" />
+              Continuar al registro
+              <ArrowRight
+                size={18}
+                className="transition-transform group-hover:translate-x-1 group-disabled:translate-x-0"
+              />
+            </button>
+          </div>
+        </>
+      )}
 
       {!activeFields.size && (
         <p className="text-sm text-slate-500">
@@ -210,7 +216,7 @@ function ColumnMap({
     <details
       open={faltan}
       className={[
-        'card overflow-hidden',
+        'card overflow-hidden text-left',
         faltan ? 'border-amber-300 bg-amber-50/60' : '',
       ].join(' ')}
     >
@@ -264,7 +270,7 @@ function ColumnMap({
 }
 
 /* ------------------------------------------------------------------ */
-/* Datos del lote y contador de novedades                              */
+/* Datos de la facultad y del responsable                              */
 /* ------------------------------------------------------------------ */
 
 /** Marca de campo obligatorio, con su lectura para quien usa lector de pantalla. */
@@ -279,23 +285,19 @@ function Obligatorio() {
 function OfficePanel({
   metadata,
   suggestion,
-  pendientes,
-  clean,
-  filter,
   onMetadata,
-  onFilter,
 }: {
   metadata: BatchMetadata;
   suggestion: ReturnType<typeof suggestOffice> | null;
-  pendientes: number;
-  clean: boolean;
-  filter: RowFilter;
   onMetadata: (metadata: BatchMetadata) => void;
-  onFilter: (filter: RowFilter) => void;
 }) {
+  const responsableEscrito = metadata.responsable.trim().length > 0;
+  const responsableTieneGrado = startsWithGrado(metadata.responsable);
+  const responsableValido = responsableEscrito && responsableTieneGrado;
+
   return (
-    <section className="card p-4">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <section className="card p-4 text-left">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="oficina">
             Facultad u oficina responsable <Obligatorio />
@@ -332,43 +334,26 @@ function OfficePanel({
           </label>
           <input
             id="responsable"
-            className={`field ${metadata.responsable.trim() ? '' : 'border-rose-300'}`}
+            className={`field ${responsableValido ? '' : 'border-rose-300'}`}
             required
             aria-required
-            placeholder="Nombre y grado"
+            placeholder="Grado, apellidos y nombres completos"
             value={metadata.responsable}
+            // Mientras se escribe se deja el texto tal cual: transformarlo en cada
+            // tecla —como antes— borra el espacio que la persona acaba de poner
+            // (canonicalName recorta espacios finales) y pega las palabras entre
+            // sí. El formato correcto —grado en siglas y mayúscula, apellidos y
+            // nombres capitalizados— se aplica una sola vez, al salir del campo.
             onChange={(event) => onMetadata({ ...metadata, responsable: event.target.value })}
-          />
-        </div>
-
-        {/* Contador de novedades: al lado del responsable, solo el número.
-            Al pulsarlo la tabla queda filtrada a las filas que faltan. */}
-        <div className="sm:w-[104px]">
-          <span className="label block">Novedades</span>
-          <button
-            type="button"
-            onClick={() => onFilter(filter === 'errors' ? 'all' : 'errors')}
-            aria-pressed={filter === 'errors'}
-            title={
-              clean
-                ? 'Sin novedades: el lote está listo para registrar.'
-                : filter === 'errors'
-                  ? `${pendientes} novedades por corregir. Pulse para ver todas las filas.`
-                  : `${pendientes} novedades por corregir. Pulse para ver solo esas filas.`
+            onBlur={() =>
+              onMetadata({ ...metadata, responsable: canonicalName(metadata.responsable) })
             }
-            className={[
-              'flex h-[42px] w-full items-center justify-center gap-1.5 rounded-lg border text-xl font-semibold tabular-nums transition',
-              clean
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                : 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100',
-            ].join(' ')}
-          >
-            {clean ? <CircleCheck size={20} /> : null}
-            {clean ? 0 : pendientes}
-            <span className="sr-only">
-              {clean ? 'novedades: ninguna' : `novedades pendientes: ${pendientes}`}
-            </span>
-          </button>
+          />
+          {responsableEscrito && !responsableTieneGrado && (
+            <p className="mt-1.5 text-[11px] text-rose-600">
+              Falta el grado en siglas al comienzo, p. ej. «CA», «TE» o «DO».
+            </p>
+          )}
         </div>
       </div>
     </section>

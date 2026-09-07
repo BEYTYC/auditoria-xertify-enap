@@ -4,8 +4,10 @@
  * Xertify, y normalización del número de documento.
  *
  * Regla institucional: el estudiante con país extranjero se identifica con el
- * PASAPORTE de su país; no se admiten documentos locales de otros países. El
- * extranjero residente en Colombia va como «Colombia - Cédula de extranjería».
+ * PASAPORTE de su país, o con el documento de identidad propio de ese país
+ * (el que ofrezca la lista Xertify: DNI, CURP, RUT, id…). No se acepta la
+ * «cédula de extranjería» colombiana: si el estudiante es extranjero, se
+ * corrige el país y se usa su propio documento.
  */
 
 import {
@@ -207,19 +209,29 @@ export function parseDocumentType(raw: string): ParsedDocument {
   return empty;
 }
 
-/** `true` si el tipo es admisible para el país, según la regla institucional. */
+/**
+ * `true` si el tipo es admisible para el país, según la regla institucional.
+ *
+ * Para Colombia, solo los documentos colombianos propiamente dichos (ninguno
+ * de extranjero). Para cualquier otro país, cualquier tipo que la lista
+ * Xertify ofrezca para ese país sirve: pasaporte o el documento de identidad
+ * propio del país (DNI, CURP, RUT, id…).
+ */
 export function isKindAllowedFor(country: string, kind: string): boolean {
   if (country === 'Colombia') return COLOMBIAN_ALLOWED_KINDS.includes(kind);
-  return PASSPORT_KINDS.some((p) => p.toLowerCase() === kind.toLowerCase());
+  return (BY_COUNTRY.get(country) ?? []).some((e) => e.kind === kind);
 }
 
 /** Valor Xertify que debería llevar la fila, dado el país detectado. */
 export function expectedValueFor(country: string, currentKind: string | null): string | null {
   if (country === 'Colombia') {
-    if (currentKind && COLOMBIAN_ALLOWED_KINDS.includes(currentKind)) {
+    if (currentKind && isKindAllowedFor(country, currentKind)) {
       return BY_EXACT.get(`Colombia - ${currentKind}`)?.value ?? null;
     }
     return 'Colombia - Cédula de ciudadanía';
+  }
+  if (currentKind && isKindAllowedFor(country, currentKind)) {
+    return BY_EXACT.get(`${country} - ${currentKind}`)?.value ?? null;
   }
   return passportEntryFor(country)?.value ?? null;
 }

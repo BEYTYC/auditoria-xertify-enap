@@ -213,8 +213,9 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
   lugarexpi: {
     field: 'lugarexpi',
     header: 'lugarexpi',
-    // No alimenta el certificado ni la base: se conserva tal cual y no se valida.
-    label: 'Lugar expedición (sin uso)',
+    // No alimenta la Base de Datos, pero sí sale en la plantilla: se revisa
+    // la ortografía igual que lugarexpedicion.
+    label: 'Lugar expedición certificado',
     requirement: 'opcional',
     kind: 'libre',
     aliases: ['lugarexpi', 'lugar expi', 'lugar expedicion certificado'],
@@ -272,7 +273,7 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
     field: 'nomfirma1',
     header: 'nomfirma1',
     label: 'Firmante 1',
-    requirement: 'opcional',
+    requirement: 'institucional',
     kind: 'nombre',
     aliases: ['nomfirma1', 'firmante 1', 'nombre firmante 1'],
     width: 190,
@@ -281,7 +282,7 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
     field: 'nomfirma2',
     header: 'nomfirma2',
     label: 'Firmante 2',
-    requirement: 'opcional',
+    requirement: 'institucional',
     kind: 'nombre',
     aliases: ['nomfirma2', 'firmante 2', 'nombre firmante 2'],
     width: 190,
@@ -290,7 +291,7 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
     field: 'nomfirma3',
     header: 'nomfirma3',
     label: 'Firmante 3',
-    requirement: 'opcional',
+    requirement: 'institucional',
     kind: 'nombre',
     aliases: ['nomfirma3', 'firmante 3', 'nombre firmante 3'],
     width: 190,

@@ -5,18 +5,16 @@
 
 import { useCallback, useMemo, useState } from 'react';
 
-import { loadConfig, saveConfig } from '../config/appConfig';
+import { effectiveMode, loadConfig, saveConfig } from '../config/appConfig';
 import {
-  applyManualEdit,
-  autoFixAll,
   computeMetrics,
   isBatchClean,
   removeRow,
   revalidate,
-  revertCell,
   type BatchMetrics,
 } from '../services/correctorService';
 import {
+  annotatedFileName,
   blobToBase64,
   correctedFileName,
   downloadBlob,
@@ -24,7 +22,7 @@ import {
   remapColumn,
   type ParsedTemplate,
 } from '../services/excelService';
-import { patchTemplate } from '../services/xlsxPatchService';
+import { annotateTemplate, patchTemplate } from '../services/xlsxPatchService';
 import {
   DEFAULT_LAST_CONSECUTIVO,
   DEFAULT_LAST_POSITION,
@@ -34,7 +32,7 @@ import {
   findDuplicateBatch,
   type DuplicateFinding,
 } from '../services/duplicateService';
-import { closeAdmin, openAdmin, readAdmin } from '../services/adminService';
+import { closeAdmin, isAdminAccount, openAdmin, readAdmin } from '../services/adminService';
 import { suggestOffice } from '../services/officeService';
 import {
   annulEntry,
@@ -46,6 +44,7 @@ import {
   registerBatch,
   removeLogEntry,
 } from '../services/registryService';
+import { clearMockRows } from '../services/sharepointService';
 import type { TableInfo } from '../services/sharepointService';
 import type {
   BatchMetadata,
@@ -53,7 +52,6 @@ import type {
   LedgerPosition,
   LogEntry,
   RegistrationResult,
-  RowFilter,
   SharePointConfig,
   StudentRow,
   WizardStep,
@@ -79,12 +77,10 @@ export interface AuditState {
   tableInfo: TableInfo | null;
   lastPosition: LedgerPosition;
   lastConsecutivo: number;
-  filter: RowFilter;
   loading: string | null;
   error: string | null;
   result: RegistrationResult | null;
   log: LogEntry[];
-  lastAutoFix: { fixedCells: number; byCode: Record<string, number> } | null;
 }
 
 export function useAudit() {
@@ -96,12 +92,10 @@ export function useAudit() {
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
   const [lastPosition, setLastPosition] = useState<LedgerPosition>(DEFAULT_LAST_POSITION);
   const [lastConsecutivo, setLastConsecutivo] = useState<number>(DEFAULT_LAST_CONSECUTIVO);
-  const [filter, setFilter] = useState<RowFilter>('all');
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RegistrationResult | null>(null);
   const [log, setLog] = useState<LogEntry[]>(() => readLog());
-  const [lastAutoFix, setLastAutoFix] = useState<AuditState['lastAutoFix']>(null);
   const [admin, setAdmin] = useState<string | null>(() => readAdmin());
   const [adminMensaje, setAdminMensaje] = useState<string | null>(null);
 
@@ -121,7 +115,6 @@ export function useAudit() {
     setLoading('Leyendo la plantilla…');
     setError(null);
     setResult(null);
-    setLastAutoFix(null);
 
     try {
       const template = await readTemplate(file);
@@ -147,7 +140,6 @@ export function useAudit() {
         archivoOriginal: file.name,
       });
       setStep('audit');
-      setFilter('all');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -161,33 +153,12 @@ export function useAudit() {
     setMetadata(EMPTY_METADATA);
     setResult(null);
     setError(null);
-    setLastAutoFix(null);
     setStep('upload');
   }, []);
 
   /* -------------------------------------------------------------- */
   /* Auditoría                                                       */
   /* -------------------------------------------------------------- */
-
-  const autoFix = useCallback(() => {
-    const report = autoFixAll(rows, activeFields);
-    setRows(report.rows);
-    setLastAutoFix({ fixedCells: report.fixedCells, byCode: report.byCode });
-  }, [rows, activeFields]);
-
-  const editCell = useCallback(
-    (rowId: string, field: CanonicalField, value: string) => {
-      setRows((current) => applyManualEdit(current, rowId, field, value, activeFields));
-    },
-    [activeFields],
-  );
-
-  const revert = useCallback(
-    (rowId: string, field: CanonicalField) => {
-      setRows((current) => revertCell(current, rowId, field, activeFields));
-    },
-    [activeFields],
-  );
 
   const dropRow = useCallback(
     (rowId: string) => {
@@ -336,11 +307,15 @@ export function useAudit() {
   /* Administración                                                  */
   /* -------------------------------------------------------------- */
 
-  const abrirAdmin = useCallback((cuenta: string) => {
-    const abierto = openAdmin(cuenta);
+  const abrirAdmin = useCallback((cuenta: string, clave: string) => {
+    const abierto = openAdmin(cuenta, clave);
     setAdmin(abierto);
     setAdminMensaje(
-      abierto ? null : 'Esa cuenta no es de la Oficina de Estadística.',
+      abierto
+        ? null
+        : isAdminAccount(cuenta)
+          ? 'La contraseña no es correcta.'
+          : 'Esa cuenta no es de la Oficina de Estadística.',
     );
     return abierto !== null;
   }, []);
@@ -357,23 +332,39 @@ export function useAudit() {
     setAdminMensaje('Renglón retirado de la bitácora. El libro no se modificó.');
   }, []);
 
+  /**
+   * Vacía la bitácora de este equipo. En modo local (mock) también borra el
+   * libro de prueba que se acumula en el navegador: ahí no hay nada real que
+   * proteger, y dejarlo lleno es lo que hacía que un lote de prueba ya
+   * registrado siguiera bloqueado aunque la bitácora se viera vacía.
+   */
   const vaciarBitacora = useCallback(() => {
     clearLog();
     setLog([]);
-    setAdminMensaje('Bitácora vaciada. El libro no se modificó.');
-  }, []);
+    if (effectiveMode(config) === 'mock') {
+      clearMockRows();
+      // La tabla de destino ya leída queda desactualizada: se descarta para
+      // que la próxima consulta —al entrar al registro— vea el libro vacío.
+      setTableInfo(null);
+      setAdminMensaje(
+        'Bitácora vaciada, junto con el libro de prueba del registro local. El libro real no se modificó.',
+      );
+    } else {
+      setAdminMensaje('Bitácora vaciada. El libro no se modificó.');
+    }
+  }, [config]);
 
-  /** Anula el asiento: borra del libro las filas de ese lote. */
-  const anularAsiento = useCallback(
+  /** Anula el registro: borra del libro las filas de ese lote. */
+  const anularRegistro = useCallback(
     async (entry: LogEntry) => {
-      setLoading('Anulando el asiento…');
+      setLoading('Anulando el registro…');
       setAdminMensaje(null);
       try {
         const { borradas, log: siguiente } = await annulEntry(config, entry);
         setLog(siguiente);
         setAdminMensaje(
           `Se anularon ${borradas} filas del libro para ${entry.idRegistro}. ` +
-            'La numeración de los asientos siguientes no cambia.',
+            'La numeración de los registros siguientes no cambia.',
         );
         return borradas;
       } catch (caught) {
@@ -387,23 +378,30 @@ export function useAudit() {
   );
 
   /**
-   * Comprueba que el último asiento de la bitácora sea, de verdad, el último
-   * del libro: lee la Base de Datos y compara la posición.
+   * Lee la última posición del libro directamente de la Base de Datos. No
+   * depende de que la bitácora de este equipo tenga un registro con qué
+   * compararla —si lo tiene, se usa para confirmar que coincide—, porque
+   * exigirlo dejaba el botón sin uso justo cuando más hacía falta: cuando la
+   * bitácora local no refleja lo que ya hay en la base.
    */
   const validarUltimo = useCallback(async () => {
-    const ultimo = log.find((entry) => entry.outcome === 'success' && !entry.anulado);
-    if (!ultimo) {
-      setAdminMensaje('La bitácora no tiene ningún asiento vigente que validar.');
-      return;
-    }
-
     setLoading('Validando contra la Base de Datos…');
     setAdminMensaje(null);
     try {
       const info = await inspectDestination(config);
       const posicion = info.lastPosition;
       if (!posicion) {
-        setAdminMensaje('No se pudo leer la última posición del libro.');
+        setAdminMensaje('La Base de Datos no tiene ninguna fila registrada todavía.');
+        return;
+      }
+
+      const ultimo = log.find((entry) => entry.outcome === 'success' && !entry.anulado);
+      if (!ultimo) {
+        setAdminMensaje(
+          `El libro cierra en libro ${posicion.libro}, folio ${posicion.folio}, ` +
+            `registro ${posicion.registro}. La bitácora de este equipo no tiene ningún registro ` +
+            'con el que compararlo.',
+        );
         return;
       }
 
@@ -419,7 +417,7 @@ export function useAudit() {
           : `No coincide: el libro cierra en libro ${posicion.libro}, folio ${posicion.folio}, ` +
               `registro ${posicion.registro}, y ${ultimo.idRegistro} termina en libro ` +
               `${ultimo.libro}, folio ${ultimo.folioFinal}, registro ${ultimo.registroFinal}. ` +
-              'Puede que alguien más haya registrado después, o que el asiento no llegara.',
+              'Puede que alguien más haya registrado después, o que el registro no llegara.',
       );
     } catch (caught) {
       setAdminMensaje(caught instanceof Error ? caught.message : String(caught));
@@ -461,6 +459,22 @@ export function useAudit() {
     [buildCorrected, parsed],
   );
 
+  /**
+   * La plantilla no se corrige dentro de la aplicación: se descarga tal como
+   * llegó —con el mismo formato de siempre—, pero con cada celda que tiene
+   * una novedad pendiente resaltada en amarillo y con un comentario de Excel
+   * explicando qué corregir. El responsable arregla ahí y vuelve a cargar; lo
+   * que ya quedó bien deja de resaltarse en la siguiente descarga.
+   */
+  const downloadAnnotated = useCallback(() => {
+    if (!parsed) return;
+    const blob = annotateTemplate(parsed.buffer, rows, {
+      sheetName: parsed.sheetName,
+      mappings: parsed.map.mappings,
+    });
+    downloadBlob(blob, annotatedFileName(parsed.fileName));
+  }, [parsed, rows]);
+
   return {
     step,
     setStep,
@@ -481,31 +495,26 @@ export function useAudit() {
     cerrarAdmin,
     borrarDeBitacora,
     vaciarBitacora,
-    anularAsiento,
+    anularRegistro,
     validarUltimo,
     lastPosition,
     setLastPosition,
     lastConsecutivo,
     setLastConsecutivo,
-    filter,
-    setFilter,
     loading,
     error,
     setError,
     result,
     log,
-    lastAutoFix,
     activeFields,
     preview,
     loadFile,
     reset,
-    autoFix,
-    editCell,
-    revert,
     dropRow,
     remap,
     register,
     downloadCorrected,
+    downloadAnnotated,
   };
 }
 

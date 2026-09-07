@@ -95,20 +95,33 @@ export function findDuplicateBatch(
   return null;
 }
 
-/** Texto único del bloqueo, para que diga lo mismo en pantalla y en el error. */
+/**
+ * Texto único del bloqueo, para que diga lo mismo en pantalla y en el error.
+ *
+ * Cuando el choque viene de la bitácora de este equipo (`anterior` presente),
+ * sí tiene sentido mandar a buscarlo ahí y descargarlo. Pero cuando el choque
+ * salió solo de la Base de Datos —otro equipo lo registró, o esta bitácora se
+ * vació—, decirle que lo busque en una bitácora vacía es lo que confunde:
+ * ahí no va a encontrar nada.
+ */
 export function duplicateMessage(finding: DuplicateFinding): string {
   const cuantos =
     finding.repetidos === finding.total
       ? 'Este lote ya fue registrado'
       : `${finding.repetidos} de los ${finding.total} graduados de este lote ya están registrados`;
 
-  const cuando = finding.anterior
-    ? ` el ${finding.anterior.fechaHoraLegible}, con el número ${finding.anterior.idRegistro}`
-    : ' en la Base de Datos';
+  if (finding.anterior) {
+    return (
+      `${cuantos} el ${finding.anterior.fechaHoraLegible}, con el número ${finding.anterior.idRegistro}. ` +
+      'No se puede volver a generar. Búsquelo en la bitácora de registros y descárguelo desde allí. ' +
+      'Si necesita corregir o eliminar algún registro, comuníquese con la Oficina de Estadística.'
+    );
+  }
 
   return (
-    `${cuantos}${cuando}. No se puede volver a generar. Búsquelo en la bitácora de registros ` +
-    'y descárguelo desde allí. Si necesita corregir o eliminar algún registro, comuníquese ' +
-    'con la Oficina de Estadística.'
+    `${cuantos} en la Base de Datos, pero no en la bitácora de este equipo: puede que se haya ` +
+    'registrado desde otro computador, o que esta bitácora se haya vaciado después. No se puede ' +
+    'volver a generar. Verifique en la Base de Datos o comuníquese con la Oficina de Estadística ' +
+    'si necesita corregir o eliminar el registro.'
   );
 }

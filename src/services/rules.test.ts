@@ -75,6 +75,14 @@ function suggestionFor(
   return issues.find((issue) => issue.suggestion !== undefined)?.suggestion;
 }
 
+function previewFor(
+  overrides: Partial<Record<CanonicalField, string>>,
+  field: CanonicalField,
+): string | undefined {
+  const issues = validateRow(values(overrides), ALL_FIELDS)[field] ?? [];
+  return issues.find((issue) => issue.preview !== undefined)?.preview;
+}
+
 function makeRow(overrides: Partial<Record<CanonicalField, string>>, excelRow = 3): StudentRow {
   const filled = values(overrides);
   const cells = {} as StudentRow['cells'];
@@ -232,23 +240,38 @@ describe('tipo de documento', () => {
     );
   });
 
-  it('obliga a pasaporte para extranjeros', () => {
-    const codes = codesFor({ tipodocumento: 'Spain - id' }, 'tipodocumento');
+  it('un extranjero puede identificarse con pasaporte o con el documento de su país', () => {
+    // «id» es la forma en que Xertify ofrece el documento propio de España:
+    // ya no se obliga a pasaporte, sirve tal cual.
+    expect(codesFor({ tipodocumento: 'Spain - id' }, 'tipodocumento')).toEqual([]);
+    expect(codesFor({ tipodocumento: 'Mexico - CURP' }, 'tipodocumento')).toEqual([]);
+  });
+
+  it('sigue reclamando un tipo que la lista no ofrece para ese país', () => {
+    const codes = codesFor({ tipodocumento: 'Spain - NIT' }, 'tipodocumento');
     expect(codes).toContain('DOC.EXTRANJERO_SIN_PASAPORTE');
-    expect(suggestionFor({ tipodocumento: 'Spain - id' }, 'tipodocumento')).toBe('Spain - Passport');
+    expect(suggestionFor({ tipodocumento: 'Spain - NIT' }, 'tipodocumento')).toBe('Spain - Passport');
   });
 
   it('respeta la grafía de cada país en la lista', () => {
-    expect(suggestionFor({ tipodocumento: 'Perú - DNI' }, 'tipodocumento')).toBe('Perú - Pasaporte');
-    expect(suggestionFor({ tipodocumento: 'United States - SSN' }, 'tipodocumento')).toBe(
-      'United States - PASSPORT',
+    // «DNI» y «SSN» son el documento propio de Perú y Estados Unidos: ya
+    // están en la lista tal cual, así que no se tocan.
+    expect(codesFor({ tipodocumento: 'Perú - DNI' }, 'tipodocumento')).toEqual([]);
+    expect(codesFor({ tipodocumento: 'United States - SSN' }, 'tipodocumento')).toEqual([]);
+    // Pero si la grafía viene mal —sin tilde, en minúscula—, se corrige a la
+    // forma exacta de la lista.
+    expect(suggestionFor({ tipodocumento: 'peru - dni' }, 'tipodocumento')).toBe('Perú - DNI');
+    expect(suggestionFor({ tipodocumento: 'united states - ssn' }, 'tipodocumento')).toBe(
+      'United States - SSN',
     );
   });
 
-  it('acepta la cédula de extranjería con país Colombia', () => {
-    expect(codesFor({ tipodocumento: 'Colombia - Cédula de extranjería' }, 'tipodocumento')).toEqual(
-      [],
+  it('ya no acepta la cédula de extranjería: pide el documento del propio país', () => {
+    const codes = codesFor(
+      { tipodocumento: 'Colombia - Cédula de extranjería' },
+      'tipodocumento',
     );
+    expect(codes).toContain('DOC.CEDULA_EXTRANJERIA');
   });
 
   it('sigue rechazando otros tipos con país Colombia', () => {
@@ -262,8 +285,14 @@ describe('tipo de documento', () => {
     expect(parseDocumentType('Estados Unidos - Pasaporte').country).toBe('United States');
   });
 
-  it('avisa cuando el país no tiene pasaporte en la lista', () => {
-    expect(codesFor({ tipodocumento: 'Guatemala - ID' }, 'tipodocumento')).toContain(
+  it('acepta el documento propio aunque el país no tenga pasaporte en la lista', () => {
+    // Guatemala solo ofrece «ID» en Xertify —sin pasaporte—, y con la regla
+    // nueva ese documento propio es válido tal cual.
+    expect(codesFor({ tipodocumento: 'Guatemala - ID' }, 'tipodocumento')).toEqual([]);
+  });
+
+  it('avisa cuando ni el tipo ni el pasaporte están en la lista de ese país', () => {
+    expect(codesFor({ tipodocumento: 'Guatemala - NIT' }, 'tipodocumento')).toContain(
       'DOC.PAIS_SIN_PASAPORTE',
     );
   });
@@ -317,6 +346,20 @@ describe('número de documento', () => {
       ),
     ).toContain('NUM.CEDULA_INVALIDA');
   });
+
+  it('avisa que está mal escrita cuando ya trae puntos pero mal agrupados', () => {
+    const codes = codesFor(
+      { tipodocumento: 'Colombia - Cédula de ciudadanía', numerodocumento: '7.9955.190' },
+      'numerodocumento',
+    );
+    expect(codes).toContain('NUM.CEDULA_MAL_AGRUPADA');
+    expect(
+      suggestionFor(
+        { tipodocumento: 'Colombia - Cédula de ciudadanía', numerodocumento: '7.9955.190' },
+        'numerodocumento',
+      ),
+    ).toBe('79.955.190');
+  });
 });
 
 describe('docformato y TIPO DE DOC', () => {
@@ -350,6 +393,14 @@ describe('correo electrónico', () => {
     expect(suggestionFor({ email: 'ANA @enap.edu.co' }, 'email')).toBe('ana@enap.edu.co');
   });
 
+  it('marca dónde está el espacio, aunque sea uno solo entre palabras', () => {
+    const preview = previewFor({ email: 'bolanos.jimenez @gmail.com' }, 'email');
+    expect(preview).toContain('');
+    expect(suggestionFor({ email: 'bolanos.jimenez @gmail.com' }, 'email')).toBe(
+      'bolanos.jimenez@gmail.com',
+    );
+  });
+
   it('exige el correo por ser obligatorio para Xertify', () => {
     expect(codesFor({ email: '' }, 'email')).toContain('CAMPO.VACIO');
   });
@@ -362,12 +413,12 @@ describe('correo electrónico', () => {
 describe('lugar de expedición', () => {
   it('normaliza todas las variantes de Bogotá', () => {
     for (const variant of ['BOGOTA', 'Bogota D.C.', 'bogotá dc', 'BOGOTA D,C', 'Bogotá']) {
-      expect(suggestionFor({ lugarexpedicion: variant }, 'lugarexpedicion')).toBe('Bogotá D.C');
+      expect(suggestionFor({ lugarexpedicion: variant }, 'lugarexpedicion')).toBe('Bogotá D.C.');
     }
   });
 
   it('acepta la forma exacta exigida', () => {
-    expect(codesFor({ lugarexpedicion: 'Bogotá D.C' }, 'lugarexpedicion')).toEqual([]);
+    expect(codesFor({ lugarexpedicion: 'Bogotá D.C.' }, 'lugarexpedicion')).toEqual([]);
   });
 
   it('quita el departamento adosado', () => {
@@ -424,13 +475,15 @@ describe('nombres y apellidos', () => {
 /* ------------------------------------------------------------------ */
 
 describe('columnas li, fo y numre', () => {
-  it('rechaza valores por encima de 99', () => {
-    expect(codesFor({ fo: '120' }, 'fo')).toContain('LEDGER.FUERA_RANGO');
-    expect(codesFor({ numre: '100' }, 'numre')).toContain('LEDGER.FUERA_RANGO');
+  it('las asigna la Oficina de Estadística al registrar: deben llegar vacías', () => {
+    expect(codesFor({ li: '3' }, 'li')).toContain('LEDGER.DEBE_VENIR_VACIO');
+    expect(codesFor({ fo: '98' }, 'fo')).toContain('LEDGER.DEBE_VENIR_VACIO');
+    expect(codesFor({ numre: '27' }, 'numre')).toContain('LEDGER.DEBE_VENIR_VACIO');
   });
 
-  it('acepta valores válidos y el campo vacío', () => {
-    expect(codesFor({ fo: '98', numre: '27' }, 'fo')).toEqual([]);
+  it('acepta el campo vacío, que es como debe llegar', () => {
+    expect(codesFor({}, 'li')).toEqual([]);
+    expect(codesFor({}, 'fo')).toEqual([]);
     expect(codesFor({}, 'numre')).toEqual([]);
   });
 });
@@ -470,7 +523,7 @@ describe('mapeo a Tabla3', () => {
       tipodocumento: 'Colombia - Cédula de ciudadanía',
       docformato: 'cédula de ciudadanía',
       numerodocumento: '1026286605',
-      lugarexpedicion: 'Bogotá D.C',
+      lugarexpedicion: 'Bogotá D.C.',
       titulo: 'English Intermediate - B1',
       intensidad: '120',
       fechainicio: '12 de enero de 2026',
@@ -503,7 +556,7 @@ describe('mapeo a Tabla3', () => {
     expect(row.NOMBRES).toBe('LUIS GABRIEL');
     expect(row['TIPO DE DOC']).toBe('CC');
     expect(row['DOCUMENTO DE IDENTIDAD']).toBe(1026286605);
-    expect(row['LUGAR EXPEDICION']).toBe('BOGOTÁ D.C');
+    expect(row['LUGAR EXPEDICION']).toBe('BOGOTÁ D.C.');
     expect(row['NOMBRE DEL CURSO']).toBe('ENGLISH INTERMEDIATE - B1');
     expect(row.INTENSIDAD).toBe(120);
     expect(row['OFICINA RESPONSABLE']).toBe('DICSH - DIVISIÓN CIENCIAS SOCIALES');
@@ -668,14 +721,14 @@ describe('rango de fechas del curso', () => {
 
   it('completa el mes y el año que falten en el extremo izquierdo', () => {
     expect(formatSpanishRange(parseDateRange('12 a 15 de junio de 2026')!)).toBe(
-      '12 a 15 de junio de 2026',
+      '12 al 15 de junio de 2026',
     );
     expect(formatSpanishRange(parseDateRange('12 de junio a 4 de julio de 2026')!)).toBe(
-      '12 de junio a 4 de julio de 2026',
+      '12 de junio al 4 de julio de 2026',
     );
     expect(
       formatSpanishRange(parseDateRange('12 de diciembre de 2025 a 4 de enero de 2026')!),
-    ).toBe('12 de diciembre de 2025 a 4 de enero de 2026');
+    ).toBe('12 de diciembre de 2025 al 4 de enero de 2026');
   });
 
   it('admite otros separadores', () => {
@@ -697,14 +750,42 @@ describe('rango de fechas del curso', () => {
     expect(codes).not.toContain('FECHA.ILEGIBLE');
     expect(codes).toContain('FECHA.FORMATO_RANGO');
     expect(suggestionFor({ fechainicio: '12 de junio al 04 de julio de 2026' }, 'fechainicio')).toBe(
-      '12 de junio a 4 de julio de 2026',
+      '12 de junio al 4 de julio de 2026',
     );
   });
 
-  it('acepta el rango ya canónico sin quejarse', () => {
-    expect(codesFor({ fechainicio: '12 de junio a 4 de julio de 2026' }, 'fechainicio')).toEqual(
-      [],
+  it('«al» es la única forma correcta: acepta el rango ya canónico sin quejarse', () => {
+    for (const texto of [
+      '19 de febrero al 9 de mayo de 2026',
+      '19 de febrero al 9 de mayo 2026',
+      '12 al 15 de junio de 2026',
+      '12 de diciembre de 2025 al 4 de enero de 2026',
+    ]) {
+      expect(codesFor({ fechainicio: texto }, 'fechainicio')).toEqual([]);
+    }
+  });
+
+  it('«a» ya no se acepta: la institución exige «al»', () => {
+    const codes = codesFor({ fechainicio: '12 de junio a 4 de julio de 2026' }, 'fechainicio');
+    expect(codes).toContain('FECHA.FORMATO_RANGO');
+    expect(
+      suggestionFor({ fechainicio: '12 de junio a 4 de julio de 2026' }, 'fechainicio'),
+    ).toBe('12 de junio al 4 de julio de 2026');
+  });
+
+  it('reconoce el rango aunque empiece con el artículo «del»', () => {
+    const codes = codesFor(
+      { fechainicio: 'del 31 de agosto al 04 de septiembre del 2026' },
+      'fechainicio',
     );
+    expect(codes).not.toContain('FECHA.ILEGIBLE');
+    expect(codes).toContain('FECHA.FORMATO_RANGO');
+    expect(
+      suggestionFor(
+        { fechainicio: 'del 31 de agosto al 04 de septiembre del 2026' },
+        'fechainicio',
+      ),
+    ).toBe('31 de agosto al 4 de septiembre de 2026');
   });
 
   it('la fecha de emisión no admite rango: es una sola fecha', () => {
@@ -773,12 +854,38 @@ describe('campos opcionales', () => {
   });
 
   it('pero si viene, se sigue revisando', () => {
-    expect(suggestionFor({ lugarexpedicion: 'BOGOTA' }, 'lugarexpedicion')).toBe('Bogotá D.C');
+    expect(suggestionFor({ lugarexpedicion: 'BOGOTA' }, 'lugarexpedicion')).toBe('Bogotá D.C.');
   });
 
-  it('«lugarexpi» no se valida: no alimenta nada', () => {
-    expect(codesFor({ lugarexpi: 'cualquier cosa' }, 'lugarexpi')).toEqual([]);
+  it('«lugarexpi» no alimenta nada, pero igual se le revisan tildes y ortografía', () => {
     expect(codesFor({ lugarexpi: '' }, 'lugarexpi')).toEqual([]);
+    expect(suggestionFor({ lugarexpi: 'MEXICO' }, 'lugarexpi')).toBe('México');
+    expect(codesFor({ lugarexpi: 'NA' }, 'lugarexpi')).toContain('LUGAR.NO_APLICA');
+  });
+});
+
+describe('lugar de expedición: «NA» y ortografía', () => {
+  it('nunca acepta «NA» ni «No aplica» como lugar de expedición', () => {
+    for (const texto of ['NA', 'N/A', 'na', 'No aplica', 'NO APLICA', 'Ninguna']) {
+      const codes = codesFor({ lugarexpedicion: texto }, 'lugarexpedicion');
+      expect(codes).toContain('LUGAR.NO_APLICA');
+    }
+  });
+
+  it('México y Moniquirá llevan tilde, aunque vengan en mayúscula', () => {
+    expect(suggestionFor({ lugarexpedicion: 'MEXICO' }, 'lugarexpedicion')).toBe('México');
+    expect(suggestionFor({ lugarexpedicion: 'Moniquira' }, 'lugarexpedicion')).toBe('Moniquirá');
+    expect(codesFor({ lugarexpedicion: 'México' }, 'lugarexpedicion')).toEqual([]);
+    expect(codesFor({ lugarexpedicion: 'Moniquirá' }, 'lugarexpedicion')).toEqual([]);
+  });
+});
+
+describe('nombre del curso: tildes aunque esté en mayúscula', () => {
+  it('restituye tildes en un título todo en mayúscula', () => {
+    expect(suggestionFor({ titulo: 'CURSO DE INGENIERIA NAVAL' }, 'titulo')).toBe(
+      'CURSO DE INGENIERÍA NAVAL',
+    );
+    expect(codesFor({ titulo: 'CURSO DE NAVEGACIÓN MARÍTIMA' }, 'titulo')).toEqual([]);
   });
 });
 
@@ -806,13 +913,75 @@ describe('grados militares en los firmantes', () => {
   it('no confunde los conectores con siglas', () => {
     expect(canonicalName('CN JUAN DE LA ROSA')).toBe('CN Juan de la Rosa');
   });
+
+  it('también revisa tildes en el firmante, igual que en nombres y apellidos', () => {
+    const codes = codesFor({ nomfirma1: 'CA Dario Eduardo Sanabria Gaitan' }, 'nomfirma1');
+    expect(codes.length).toBeGreaterThan(0);
+    expect(suggestionFor({ nomfirma1: 'CA Dario Eduardo Sanabria Gaitan' }, 'nomfirma1')).toBe(
+      'CA Darío Eduardo Sanabria Gaitán',
+    );
+  });
+});
+
+describe('orden jerárquico de los firmantes', () => {
+  it('el firmante 1 debe ser de menor jerarquía que el firmante 2', () => {
+    // CA (Contralmirante) es más antiguo que CF (Capitán de Fragata): van al revés.
+    const codes = codesFor(
+      { nomfirma1: 'CA Juan Pérez', nomfirma2: 'CF Ana López' },
+      'nomfirma1',
+    );
+    expect(codes).toContain('FIRMA.ORDEN_JERARQUICO');
+  });
+
+  it('no reclama nada cuando el orden ya es correcto', () => {
+    // CF (Capitán de Fragata) es menos antiguo que CA (Contralmirante).
+    const codes = codesFor(
+      { nomfirma1: 'CF Ana López', nomfirma2: 'CA Juan Pérez' },
+      'nomfirma1',
+    );
+    expect(codes).not.toContain('FIRMA.ORDEN_JERARQUICO');
+  });
+
+  it('reconoce las equivalencias de Infantería de Marina', () => {
+    // CACIM (Contralmirante) es más antiguo que TCCIM (Capitán de Fragata).
+    const codes = codesFor(
+      { nomfirma1: 'CACIM Juan Pérez', nomfirma2: 'TCCIM Ana López' },
+      'nomfirma1',
+    );
+    expect(codes).toContain('FIRMA.ORDEN_JERARQUICO');
+  });
+
+  it('no compara si algún grado no se reconoce', () => {
+    const codes = codesFor(
+      { nomfirma1: 'Juan Pérez', nomfirma2: 'CA Ana López' },
+      'nomfirma1',
+    );
+    expect(codes).not.toContain('FIRMA.ORDEN_JERARQUICO');
+  });
 });
 
 describe('teléfono', () => {
-  it('acepta el indicativo separado del número', () => {
+  it('acepta el indicativo separado del número por un solo espacio', () => {
     expect(codesFor({ telefono: '+57 3052812384' }, 'telefono')).toEqual([]);
-    expect(codesFor({ telefono: '3052812384' }, 'telefono')).toEqual([]);
-    expect(codesFor({ telefono: '+573052812384' }, 'telefono')).toEqual([]);
+  });
+
+  it('reclama el indicativo cuando el número viene solo con dígitos', () => {
+    expect(codesFor({ telefono: '3052812384' }, 'telefono')).toContain('TEL.SIN_INDICATIVO');
+    // Es un celular colombiano (10 dígitos, empieza por 3): se propone «+57».
+    expect(suggestionFor({ telefono: '3052812384' }, 'telefono')).toBe('+57 3052812384');
+
+    // Otro largo: no se arriesga un indicativo, pero igual se avisa.
+    expect(codesFor({ telefono: '5212345678' }, 'telefono')).toContain('TEL.SIN_INDICATIVO');
+    expect(suggestionFor({ telefono: '5212345678' }, 'telefono')).toBeUndefined();
+  });
+
+  it('exige el espacio cuando el indicativo viene pegado o mal separado', () => {
+    expect(codesFor({ telefono: '+573052812384' }, 'telefono')).toContain('TEL.FORMATO');
+    expect(suggestionFor({ telefono: '+573052812384' }, 'telefono')).toBe('+57 3052812384');
+
+    expect(codesFor({ telefono: '+57  3052812384' }, 'telefono')).toContain('TEL.FORMATO');
+    expect(codesFor({ telefono: '+57 305 281 2384' }, 'telefono')).toContain('TEL.FORMATO');
+    expect(suggestionFor({ telefono: '+57 305 281 2384' }, 'telefono')).toBe('+57 3052812384');
   });
 
   it('sigue reclamando guiones y paréntesis', () => {
@@ -825,11 +994,15 @@ describe('teléfono', () => {
 });
 
 describe('cédula de extranjería', () => {
-  it('pasa sin novedades y viaja a la base como CE', () => {
+  it('ya no se acepta: hay que pedir pasaporte o el documento del país de origen', () => {
     const issues =
       validateRow(values({ tipodocumento: 'Colombia - Cédula de extranjería' }), ALL_FIELDS)
         .tipodocumento ?? [];
-    expect(issues).toEqual([]);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues[0].code).toBe('DOC.CEDULA_EXTRANJERIA');
+  });
+
+  it('sigue reconociéndose para lo que ya está en la Base de Datos histórica', () => {
     expect(dbAbbreviationFor(parseDocumentType('Colombia - Cédula de extranjería'))).toBe('CE');
     expect(docFormatFor(parseDocumentType('Colombia - Cédula de extranjería'))).toBe(
       'cédula de extranjería',
@@ -839,15 +1012,17 @@ describe('cédula de extranjería', () => {
 
 describe('el «de» del año en un rango es opcional', () => {
   it('acepta las dos formas sin marcar error', () => {
-    expect(codesFor({ fechainicio: '19 de febrero a 9 de mayo 2026' }, 'fechainicio')).toEqual([]);
-    expect(codesFor({ fechainicio: '19 de febrero a 9 de mayo de 2026' }, 'fechainicio')).toEqual(
+    expect(codesFor({ fechainicio: '19 de febrero al 9 de mayo 2026' }, 'fechainicio')).toEqual(
+      [],
+    );
+    expect(codesFor({ fechainicio: '19 de febrero al 9 de mayo de 2026' }, 'fechainicio')).toEqual(
       [],
     );
   });
 
   it('pero sigue corrigiendo lo que sí está mal', () => {
     expect(suggestionFor({ fechainicio: '19 de Febrero al 09 de mayo 2026' }, 'fechainicio')).toBe(
-      '19 de febrero a 9 de mayo de 2026',
+      '19 de febrero al 9 de mayo de 2026',
     );
   });
 });

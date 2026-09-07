@@ -368,3 +368,13 @@ export function correctedFileName(original: string, idRegistro: string): string 
   const base = original.replace(/\.(xlsx|xlsm|xls)$/i, '');
   return `${base} — CORREGIDO ${idRegistro}.xlsx`;
 }
+
+/**
+ * Nombre sugerido para la plantilla con las novedades marcadas en amarillo.
+ * No lleva número de registro: todavía no se ha registrado nada, porque el
+ * lote sigue con errores.
+ */
+export function annotatedFileName(original: string): string {
+  const base = original.replace(/\.(xlsx|xlsm|xls)$/i, '');
+  return `${base} — NOVEDADES.xlsx`;
+}

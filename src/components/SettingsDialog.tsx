@@ -3,11 +3,14 @@
  * Panel de conexión con SharePoint: elige el adaptador y guarda sus credenciales.
  */
 
-import { Cloud, Server, X } from 'lucide-react';
+import { Cloud, HelpCircle, Lock, LogOut, Server, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { effectiveMode } from '../config/appConfig';
 import type { SharePointConfig, SharePointMode } from '../types';
+
+/** Cuenta de la Oficina de Estadística que atiende la recuperación de clave. */
+const CUENTA_RECUPERACION = 'jestadisticaplen@enap.edu.co';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -17,6 +20,11 @@ interface SettingsDialogProps {
   onTest: () => void;
   testing: boolean;
   testResult: string | null;
+  /** Cuenta con la que está abierta la administración, o `null`. */
+  admin: string | null;
+  adminMensaje: string | null;
+  onAbrirAdmin: (cuenta: string, clave: string) => boolean;
+  onCerrarAdmin: () => void;
 }
 
 const MODES: { key: SharePointMode; title: string; body: string }[] = [
@@ -45,6 +53,10 @@ export function SettingsDialog({
   onTest,
   testing,
   testResult,
+  admin,
+  adminMensaje,
+  onAbrirAdmin,
+  onCerrarAdmin,
 }: SettingsDialogProps) {
   const [draft, setDraft] = useState<SharePointConfig>(config);
 
@@ -63,6 +75,20 @@ export function SettingsDialog({
 
   const active = effectiveMode(draft);
 
+  // El engranaje es la puerta de entrada a la administración: mientras no se
+  // haya iniciado sesión, lo primero que se ve es el ingreso, no los ajustes
+  // de conexión. Los ajustes solo se muestran una vez identificada la Oficina
+  // de Estadística.
+  if (!admin) {
+    return (
+      <AdminGate
+        onClose={onClose}
+        onAbrir={onAbrirAdmin}
+        mensaje={adminMensaje}
+      />
+    );
+  }
+
   return (
     <div
       role="dialog"
@@ -79,10 +105,25 @@ export function SettingsDialog({
             <Server size={16} className="text-navy-600" />
             Conexión con la Base de Datos
           </h2>
-          <button type="button" onClick={onClose} className="btn-ghost px-2 py-1">
-            <X size={16} />
-            <span className="sr-only">Cerrar</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-[12px] font-medium text-navy-700">
+              <ShieldCheck size={14} />
+              Administración: {admin}
+            </span>
+            <button
+              type="button"
+              onClick={onCerrarAdmin}
+              className="btn-ghost px-2 py-1 text-[12px]"
+              title="Cerrar la sesión de administración"
+            >
+              <LogOut size={13} />
+              Salir
+            </button>
+            <button type="button" onClick={onClose} className="btn-ghost px-2 py-1">
+              <X size={16} />
+              <span className="sr-only">Cerrar</span>
+            </button>
+          </div>
         </header>
 
         <div className="space-y-5 px-5 py-5">
@@ -223,6 +264,120 @@ export function SettingsDialog({
             Guardar
           </button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Puerta de administración                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Lo primero que se ve al abrir el engranaje: el ingreso de la Oficina de
+ * Estadística. Los ajustes de conexión y las acciones de administración
+ * quedan detrás de esta puerta única, en vez de repetir el ingreso en cada
+ * pantalla que los necesita.
+ */
+function AdminGate({
+  onClose,
+  onAbrir,
+  mensaje,
+}: {
+  onClose: () => void;
+  onAbrir: (cuenta: string, clave: string) => boolean;
+  mensaje: string | null;
+}) {
+  // La cuenta viene predeterminada: hoy solo la usa la Oficina de
+  // Estadística, así que basta con escribir la contraseña.
+  const [cuenta, setCuenta] = useState('admin');
+  const [clave, setClave] = useState('');
+  const [recuperar, setRecuperar] = useState(false);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ingreso de administración"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-950/40 p-4 backdrop-blur-sm"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="card my-8 w-full max-w-md">
+        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-navy-900">
+            <Lock size={16} className="text-navy-600" />
+            Administración
+          </h2>
+          <button type="button" onClick={onClose} className="btn-ghost px-2 py-1">
+            <X size={16} />
+            <span className="sr-only">Cerrar</span>
+          </button>
+        </header>
+
+        <form
+          className="space-y-4 px-5 py-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onAbrir(cuenta, clave);
+          }}
+        >
+          <p className="text-[12px] leading-snug text-slate-600">
+            Los ajustes de conexión y las acciones sobre la bitácora y el libro son de la Oficina
+            de Estadística. Inicie sesión para continuar.
+          </p>
+
+          <div>
+            <label className="label" htmlFor="admin-gate-cuenta">
+              Cuenta
+            </label>
+            <input
+              id="admin-gate-cuenta"
+              className="field"
+              value={cuenta}
+              onChange={(event) => setCuenta(event.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="label" htmlFor="admin-gate-clave">
+              Contraseña
+            </label>
+            <input
+              id="admin-gate-clave"
+              type="password"
+              autoFocus
+              className="field"
+              placeholder="••••••••••"
+              value={clave}
+              onChange={(event) => setClave(event.target.value)}
+            />
+          </div>
+
+          {mensaje && <p className="text-[12px] text-rose-700">{mensaje}</p>}
+
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              onClick={() => setRecuperar((value) => !value)}
+              className="inline-flex items-center gap-1 text-[12px] font-medium text-navy-600 underline decoration-dotted hover:text-navy-800"
+            >
+              <HelpCircle size={12} />
+              ¿Olvidó su contraseña?
+            </button>
+            <button type="submit" className="btn-primary">
+              Entrar
+            </button>
+          </div>
+
+          {recuperar && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-[12px] leading-snug text-slate-700">
+              Escriba a <strong>{CUENTA_RECUPERACION}</strong> para recuperar el acceso de
+              administración.
+            </p>
+          )}
+        </form>
       </div>
     </div>
   );

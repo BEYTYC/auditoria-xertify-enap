@@ -66,7 +66,7 @@ export interface SharePointAdapter {
   append(rows: DatabaseRow[], optionalColumns: string[]): Promise<AppendOutcome>;
   /**
    * Quita del libro las filas cuyo consecutivo `N` se indique. Es la única
-   * forma de deshacer un asiento equivocado, y solo la Oficina de Estadística
+   * forma de deshacer un registro equivocado, y solo la Oficina de Estadística
    * puede pedirla.
    */
   deleteByConsecutive(consecutivos: number[]): Promise<number>;
@@ -358,7 +358,7 @@ export class GraphAdapter implements SharePointAdapter {
     });
     if (!rangeResponse.ok) {
       throw new SharePointError(
-        'No se pudo leer la tabla para anular el asiento.',
+        'No se pudo leer la tabla para anular el registro.',
         await describeHttpError(rangeResponse),
         rangeResponse.status,
       );
@@ -476,7 +476,7 @@ export class WebhookAdapter implements SharePointAdapter {
 
   async deleteByConsecutive(): Promise<number> {
     throw new SharePointError(
-      'Power Automate solo agrega filas: para anular un asiento hay que hacerlo en el archivo, ' +
+      'Power Automate solo agrega filas: para anular un registro hay que hacerlo en el archivo, ' +
         'o configurar Microsoft Graph.',
     );
   }
