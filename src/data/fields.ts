@@ -213,9 +213,9 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
   lugarexpi: {
     field: 'lugarexpi',
     header: 'lugarexpi',
-    // No alimenta la Base de Datos, pero sí sale en la plantilla: se revisa
-    // la ortografía igual que lugarexpedicion.
-    label: 'Lugar expedición certificado',
+    // Alimenta LUGAR EXPEDICION en la Base de Datos (con lugarexpedicion
+    // como respaldo si viene vacío); ver databaseService.ts.
+    label: 'Lugar expedición (→ LUGAR EXPEDICION)',
     requirement: 'opcional',
     kind: 'libre',
     aliases: ['lugarexpi', 'lugar expi', 'lugar expedicion certificado'],

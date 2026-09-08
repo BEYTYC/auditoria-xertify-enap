@@ -24,6 +24,7 @@ import {
   blobToBase64,
   correctedFileName,
   downloadBlob,
+  fileDateFromIso,
   readTemplate,
   remapColumn,
   type ParsedTemplate,
@@ -305,7 +306,11 @@ export function useAudit() {
               mappings: parsed.map.mappings,
             },
           );
-          const nombre = correctedFileName(parsed.fileName, outcome.receipt.idRegistro);
+          const nombre = correctedFileName(
+            outcome.receipt.curso,
+            fileDateFromIso(outcome.receipt.timestampIso),
+            parsed.fileName,
+          );
           setLog(attachTemplate(outcome.receipt.idRegistro, nombre, await blobToBase64(blob)));
         } catch {
           // Sin espacio o sin archivo original: la bitácora queda sin la copia.
@@ -478,13 +483,22 @@ export function useAudit() {
     );
   }, [parsed, rows, preview, result]);
 
+  // El id de registro ya no forma parte del nombre del archivo, pero se deja
+  // en la firma porque `RegisterStep` lo pasa desde el comprobante.
   const downloadCorrected = useCallback(
-    (idRegistro: string) => {
+    (_idRegistro: string) => {
+      void _idRegistro;
       const blob = buildCorrected();
       if (!blob || !parsed) return;
-      downloadBlob(blob, correctedFileName(parsed.fileName, idRegistro));
+      const asentado = result?.receipt ?? preview?.receipt ?? null;
+      const nombre = correctedFileName(
+        asentado?.curso ?? metadata.curso,
+        asentado ? fileDateFromIso(asentado.timestampIso) : '',
+        parsed.fileName,
+      );
+      downloadBlob(blob, nombre);
     },
-    [buildCorrected, parsed],
+    [buildCorrected, parsed, result, preview, metadata.curso],
   );
 
   /**

@@ -71,20 +71,29 @@ export function MarcaDeAgua() {
  * Sello de agua dentro de un documento: se centra sobre el contenedor, que
  * debe llevar `relative overflow-hidden`.
  */
-export function SelloDeAgua({ opacity = 0.07 }: { opacity?: number }) {
+export function SelloDeAgua({
+  opacity = 0.07,
+  height = 320,
+}: {
+  opacity?: number;
+  /**
+   * Alto en píxeles. El archivo fuente mide 320px de alto, así que por
+   * encima de eso se está ampliando: a esta opacidad tan baja el ligero
+   * desenfoque no se nota, y por debajo del contenedor se recorta solo
+   * (`overflow-hidden` en el envoltorio).
+   */
+  height?: number;
+}) {
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
     >
-      {/* El archivo fuente mide 320px de alto: se muestra a ese tamaño (o
-          cerca) para no ampliarlo más de su resolución real, que es lo que
-          lo hacía ver borroso al estirarlo al 135% del contenedor. */}
       <img
         src={escudoColor}
         alt=""
-        className="h-[320px] max-h-full w-auto max-w-none"
-        style={{ opacity }}
+        className="w-auto max-w-none"
+        style={{ opacity, height }}
       />
     </div>
   );

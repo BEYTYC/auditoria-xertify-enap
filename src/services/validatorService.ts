@@ -1155,10 +1155,9 @@ export function validateRow(
   }
   if (has('docformato')) push('docformato', validateDocFormat(values.docformato, values.tipodocumento));
 
-  // `LUGAREXPEDICION` dejó de ser obligatorio: si viene se revisa, si no, no
-  // se reclama. `lugarexpi` no alimenta el certificado ni la Base de Datos,
-  // pero igual se revisa la ortografía: la plantilla la conserva y también
-  // debe salir bien escrita.
+  // Ninguna de las dos es obligatoria: si viene se revisa, si no, no se
+  // reclama. `lugarexpi` es la que alimenta LUGAR EXPEDICION en la Base de
+  // Datos (lugarexpedicion queda como respaldo si esa viene vacía).
   if (has('lugarexpedicion') && collapseSpaces(values.lugarexpedicion)) {
     push('lugarexpedicion', validateCity(values.lugarexpedicion, 'lugarexpedicion'));
   }

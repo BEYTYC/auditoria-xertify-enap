@@ -258,8 +258,8 @@ export const DB_COLUMNS = [
 export type DbColumn = (typeof DB_COLUMNS)[number];
 
 /**
- * Columnas que la institución quiere alimentar pero que todavía NO existen
- * en Tabla3. Solo se escriben si la tabla destino las ofrece.
+ * Columnas que la institución quiere alimentar y que ya existen en Tabla3.
+ * Solo se escriben si la tabla destino las ofrece (se detecta al consultar).
  */
 export const DB_OPTIONAL_COLUMNS = ['DIRECTOR FIRMANTE'] as const;
 

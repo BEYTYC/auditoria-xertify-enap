@@ -25,7 +25,7 @@ import {
   type StudentRow,
 } from '../types';
 import { formatSpanish, parseAnyDate } from './dateService';
-import { normalizeKey, similarity, toText } from './textUtils';
+import { collapseSpaces, normalizeKey, similarity, toDisplayTitle, toText } from './textUtils';
 
 /* ------------------------------------------------------------------ */
 /* Detección de encabezados                                            */
@@ -363,10 +363,35 @@ export function base64ToBlob(base64: string, type: string): Blob {
   return new Blob([bytes], { type });
 }
 
-/** Nombre sugerido para el archivo corregido. */
-export function correctedFileName(original: string, idRegistro: string): string {
-  const base = original.replace(/\.(xlsx|xlsm|xls)$/i, '');
-  return `${base} — CORREGIDO ${idRegistro}.xlsx`;
+/** Fecha de un ISO timestamp en formato `dd-mm-aaaa`, para usar en nombres de archivo. */
+export function fileDateFromIso(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const dia = String(date.getDate()).padStart(2, '0');
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  return `${dia}-${mes}-${date.getFullYear()}`;
+}
+
+/** Quita del nombre de archivo los caracteres que Windows no admite. */
+function sanitizeFileNamePart(text: string): string {
+  return collapseSpaces(text.replace(/[\\/:*?"<>|]/g, ' ')).trim();
+}
+
+/**
+ * Nombre sugerido para el archivo corregido: `Plantilla Xertify - <curso> -
+ * <fecha>.xlsx`. Si el curso viene vacío se usa el nombre original como
+ * respaldo, para no dejar el archivo sin identificar.
+ */
+export function correctedFileName(curso: string, fecha: string, original?: string): string {
+  const nombreCurso = sanitizeFileNamePart(curso ? toDisplayTitle(curso) : '');
+  const nombreFecha = sanitizeFileNamePart(fecha);
+  if (!nombreCurso) {
+    const base = (original ?? 'Plantilla Xertify').replace(/\.(xlsx|xlsm|xls)$/i, '');
+    return nombreFecha ? `${base} — ${nombreFecha}.xlsx` : `${base}.xlsx`;
+  }
+  return nombreFecha
+    ? `Plantilla Xertify - ${nombreCurso} - ${nombreFecha}.xlsx`
+    : `Plantilla Xertify - ${nombreCurso}.xlsx`;
 }
 
 /**

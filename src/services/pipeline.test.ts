@@ -141,8 +141,8 @@ describe('auditoría de extremo a extremo', () => {
     // «Perú - DNI» también es su documento propio: tampoco se fuerza a pasaporte.
     expect(after[2].cells.tipodocumento.value).toBe('Perú - DNI');
     expect(after[2].cells.lugarexpedicion.value).toBe('Ibagué');
-    // `lugarexpi` no alimenta la Base de Datos, pero igual se le revisa la
-    // ortografía, igual que a `lugarexpedicion`.
+    // `lugarexpi` es la que alimenta LUGAR EXPEDICION en la Base de Datos;
+    // igual se le revisa la ortografía, como a `lugarexpedicion`.
     expect(after[2].cells.lugarexpi.value).toBe('Cúcuta');
     expect(after[2].cells.fechainicio.value).toBe('12 de enero de 2026');
     expect(after[2].cells.fechaemite.value).toBe('1 de julio de 2026');
@@ -212,7 +212,8 @@ describe('salidas del lote', () => {
     expect(dbRows).toHaveLength(rows.length);
     expect(dbRows.map((row) => row.REG)).toEqual([28, 29, 30, 31]);
     expect(dbRows.map((row) => row.N)).toEqual([11351, 11352, 11353, 11354]);
-    expect(dbRows[0].APELLIDOS).toBe('GONZÁLEZ TORRES');
+    // Va tal cual quedó corregido en la plantilla, sin forzar mayúscula.
+    expect(dbRows[0].APELLIDOS).toBe('González Torres');
     // La cédula sale de la plantilla como texto con puntos y entra a la base
     // como número: el separador lo pone el formato `#,##0` de la columna.
     expect(dbRows[0]['DOCUMENTO DE IDENTIDAD']).toBe(1026286605);

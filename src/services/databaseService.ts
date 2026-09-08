@@ -5,16 +5,15 @@
  *
  * Equivalencias confirmadas por la institución (plantilla → base de datos):
  *
- *   NOMBRES          → NOMBRES
- *   APELLIDOS        → APELLIDOS
+ *   NOMBRES          → NOMBRES            (tal cual en la plantilla; ver toDatabasePersonName)
+ *   APELLIDOS        → APELLIDOS          (tal cual en la plantilla; ver toDatabasePersonName)
  *   NUMERODOCUMENTO  → DOCUMENTO DE IDENTIDAD
- *   LUGAREXPEDICION  → LUGAR EXPEDICION
  *   docformato       → TIPO DE DOC        (abreviado: CC, TI, CE, PS)
+ *   lugarexpi        → LUGAR EXPEDICION   (respaldo: lugarexpedicion)
  *   titulo           → NOMBRE DEL CURSO
  *   intensidad       → INTENSIDAD
  *   fechainicio      → FECHA INICIO
  *   fechaemite       → FECHA DE REGISTRO
- *   nomfirma1        → OBSEVACIONES
  *   nomfirma3        → DIRECTOR FIRMANTE  (columna opcional, ver más abajo)
  *   li / fo / numre  → LIBRO / FOLIO / REG
  *
@@ -24,9 +23,14 @@
  *   AÑO      año de FECHA DE REGISTRO
  *   OFICINA RESPONSABLE  confirmada por el responsable (ver officeService)
  *
+ * De los tres firmantes (`nomfirma1`, `nomfirma2`, `nomfirma3`) solo el
+ * tercero se copia a la base, como `DIRECTOR FIRMANTE`: los otros dos no
+ * tienen columna propia y no se escriben en ningún lado.
+ *
  * `FECHA FINALIZACION` no tiene origen en la plantilla: se deja vacía.
- * `DIRECTOR FIRMANTE` todavía no existe en Tabla3; solo se escribe si la
- * tabla la ofrece, para no romper la inserción.
+ * `OBSEVACIONES` tampoco tiene origen en la plantilla: se deja vacía.
+ * `DIRECTOR FIRMANTE` solo se escribe si la tabla destino la ofrece (se
+ * detecta al consultar), para no romper la inserción si algún día falta.
  */
 
 import {
@@ -47,8 +51,8 @@ import {
   parseDocumentType,
 } from './documentService';
 import { ACCENT_NAMES, ACCENT_PLACES, ACCENT_TEXT } from '../data/accents';
-import { AMBIGUOUS_ENYE } from '../data/names';
-import { collapseSpaces, restoreAccents } from './textUtils';
+import { AMBIGUOUS_ENYE, NAME_CONNECTORS } from '../data/names';
+import { collapseSpaces, normalizeKey, restoreAccents } from './textUtils';
 
 /** Fórmula de la columna calculada `PERIODO`, idéntica a la del archivo. */
 export const PERIODO_FORMULA =
@@ -69,6 +73,24 @@ export function toDatabaseCase(text: string): string {
  */
 export function toDatabaseName(text: string): string {
   return toDatabaseCase(restoreAccents(text, ACCENT_NAMES, AMBIGUOUS_ENYE));
+}
+
+/**
+ * NOMBRES y APELLIDOS van a la base tal como quedaron en la plantilla (ya
+ * corregidos por el auditor), sin forzar mayúscula sostenida.
+ *
+ * Única excepción: si la palabra que abre el apellido es un conector
+ * («de», «la», «del»…), esa letra va en mayúscula —un apellido que empieza
+ * así, sin nombre delante, se escribe con inicial mayúscula («De la Torre»),
+ * a diferencia de cuando el conector va en medio del nombre completo.
+ */
+export function toDatabasePersonName(text: string): string {
+  const trimmed = collapseSpaces(text);
+  if (!trimmed) return trimmed;
+  const words = trimmed.split(' ');
+  const [first, ...resto] = words;
+  if (!NAME_CONNECTORS.has(normalizeKey(first))) return trimmed;
+  return [first.charAt(0).toLocaleUpperCase('es-CO') + first.slice(1), ...resto].join(' ');
 }
 
 export function toDatabasePlace(text: string): string {
@@ -162,11 +184,11 @@ export function buildDatabaseRows(
       LIBRO: position.libro,
       FOLIO: position.folio,
       REG: position.registro,
-      APELLIDOS: toDatabaseName(cell('apellidos')),
-      NOMBRES: toDatabaseName(cell('nombres')),
+      APELLIDOS: toDatabasePersonName(cell('apellidos')),
+      NOMBRES: toDatabasePersonName(cell('nombres')),
       'TIPO DE DOC': tipoDeDocFor(cell('docformato'), cell('tipodocumento')),
       'DOCUMENTO DE IDENTIDAD': numero,
-      'LUGAR EXPEDICION': toDatabasePlace(cell('lugarexpedicion')),
+      'LUGAR EXPEDICION': toDatabasePlace(cell('lugarexpi') || cell('lugarexpedicion')),
       'NOMBRE DEL CURSO': toDatabaseText(curso),
       'FECHA INICIO': rango ? toExcelSerial(rango.start) : dateCell(inicioTexto),
       // Solo se llena cuando `fechainicio` viene como rango; si trae una fecha
@@ -177,7 +199,9 @@ export function buildDatabaseRows(
       AÑO: parseAnyDate(fechaRegistro)?.year ?? null,
       INTENSIDAD: Number.isFinite(intensidad) ? intensidad : null,
       'OFICINA RESPONSABLE': metadata.oficina,
-      OBSEVACIONES: collapseSpaces(cell('nomfirma1')) || null,
+      // De los tres firmantes solo el tercero (nomfirma3) va a la base, como
+      // DIRECTOR FIRMANTE más abajo: nomfirma1 y nomfirma2 no tienen columna.
+      OBSEVACIONES: null,
     };
 
     if (optional.has('DIRECTOR FIRMANTE')) {

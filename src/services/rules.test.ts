@@ -553,16 +553,37 @@ describe('mapeo a Tabla3', () => {
     expect(row.LIBRO).toBe(3);
     expect(row.FOLIO).toBe(98);
     expect(row.REG).toBe(28);
-    expect(row.APELLIDOS).toBe('ALARCÓN TORRES');
-    expect(row.NOMBRES).toBe('LUIS GABRIEL');
+    // Van tal cual llegan de la plantilla: no se fuerza mayúscula sostenida.
+    expect(row.APELLIDOS).toBe('Alarcón Torres');
+    expect(row.NOMBRES).toBe('Luis Gabriel');
     expect(row['TIPO DE DOC']).toBe('CC');
     expect(row['DOCUMENTO DE IDENTIDAD']).toBe(1026286605);
     expect(row['LUGAR EXPEDICION']).toBe('BOGOTÁ D.C.');
     expect(row['NOMBRE DEL CURSO']).toBe('ENGLISH INTERMEDIATE - B1');
     expect(row.INTENSIDAD).toBe(120);
     expect(row['OFICINA RESPONSABLE']).toBe('DICSH - DIVISIÓN CIENCIAS SOCIALES');
-    expect(row.OBSEVACIONES).toBe('Capitán de Navío');
+    // De los tres firmantes solo nomfirma3 se copia a la base (DIRECTOR
+    // FIRMANTE, más abajo): nomfirma1 no tiene columna propia.
+    expect(row.OBSEVACIONES).toBeNull();
     expect(row.AÑO).toBe(2026);
+  });
+
+  it('APELLIDOS/NOMBRES: si empiezan con un conector, esa letra va en mayúscula', () => {
+    const conector = [
+      makeRow({
+        nombres: 'Luis Gabriel',
+        apellidos: 'de la Torre',
+        tipodocumento: 'Colombia - Cédula de ciudadanía',
+        docformato: 'cédula de ciudadanía',
+        numerodocumento: '1026286605',
+        titulo: 'English Intermediate - B1',
+        intensidad: '120',
+        fechainicio: '12 de enero de 2026',
+        fechaemite: '14 de julio de 2026',
+      }),
+    ];
+    const [row] = buildDatabaseRows(conector, metadata, allocation);
+    expect(row.APELLIDOS).toBe('De la Torre');
   });
 
   it('deja FECHA FINALIZACION vacía por no tener origen', () => {
@@ -574,6 +595,26 @@ describe('mapeo a Tabla3', () => {
     const [row] = buildDatabaseRows(rows, metadata, allocation);
     expect(row['FECHA INICIO']).toBe(toExcelSerial(parseAnyDate('2026-01-12')!));
     expect(row['FECHA DE REGISTRO']).toBe(toExcelSerial(parseAnyDate('2026-07-14')!));
+  });
+
+  it('LUGAR EXPEDICION sale de lugarexpi, con lugarexpedicion de respaldo', () => {
+    const conLugarexpi = [
+      makeRow({
+        nombres: 'Luis Gabriel',
+        apellidos: 'Alarcón Torres',
+        tipodocumento: 'Colombia - Cédula de ciudadanía',
+        docformato: 'cédula de ciudadanía',
+        numerodocumento: '1026286605',
+        lugarexpedicion: 'Bogotá D.C.',
+        lugarexpi: 'Cúcuta',
+        titulo: 'English Intermediate - B1',
+        intensidad: '120',
+        fechainicio: '12 de enero de 2026',
+        fechaemite: '14 de julio de 2026',
+      }),
+    ];
+    const [row] = buildDatabaseRows(conLugarexpi, metadata, allocation);
+    expect(row['LUGAR EXPEDICION']).toBe('CÚCUTA');
   });
 
   it('omite DIRECTOR FIRMANTE cuando la tabla no la tiene', () => {
@@ -861,7 +902,7 @@ describe('campos opcionales', () => {
     expect(suggestionFor({ lugarexpedicion: 'BOGOTA' }, 'lugarexpedicion')).toBe('Bogotá D.C.');
   });
 
-  it('«lugarexpi» no alimenta nada, pero igual se le revisan tildes y ortografía', () => {
+  it('«lugarexpi» también se revisa (tildes y ortografía) antes de alimentar la base', () => {
     expect(codesFor({ lugarexpi: '' }, 'lugarexpi')).toEqual([]);
     expect(suggestionFor({ lugarexpi: 'MEXICO' }, 'lugarexpi')).toBe('México');
     expect(codesFor({ lugarexpi: 'NA' }, 'lugarexpi')).toContain('LUGAR.NO_APLICA');

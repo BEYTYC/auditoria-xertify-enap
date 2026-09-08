@@ -156,8 +156,8 @@ export function AuditStep({
         <>
           <OfficePanel metadata={metadata} suggestion={suggestion} onMetadata={onMetadata} />
 
-          <div className="card flex flex-col items-center gap-2 px-6 py-8">
-            <CircleCheck className="text-emerald-600" size={30} />
+          <div className="card flex flex-col items-center gap-1.5 px-6 py-4">
+            <CircleCheck className="text-emerald-600" size={26} />
             <p className="text-base font-semibold text-navy-900">
               La plantilla está perfectamente diligenciada.
             </p>
@@ -392,9 +392,6 @@ function OfficePanel({
               className="w-full bg-transparent outline-none"
             />
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            Ahí se envía el comprobante del registro con el archivo corregido.
-          </p>
           {correoEscrito && !correoValido && (
             <p className="mt-1 text-[11px] text-rose-600">No es un correo válido.</p>
           )}

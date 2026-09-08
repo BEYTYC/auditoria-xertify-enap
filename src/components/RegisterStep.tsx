@@ -172,7 +172,7 @@ function Confirmation({
           registrar —ni siquiera deshabilitado—: la única acción que queda es
           ir a la bitácora, y esa ya está en el aviso de arriba. */}
       {!duplicado && (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           <button
             type="button"
             onClick={onRegister}
@@ -182,11 +182,21 @@ function Confirmation({
                 ? 'Anexa una fila por graduado al final de Tabla3, sin sobrescribir nada.'
                 : 'Complete la facultad y el responsable antes de asentar el registro.'
             }
-            className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 px-9 py-4 text-base font-semibold text-white shadow-lg shadow-emerald-900/25 ring-1 ring-inset ring-white/20 transition hover:from-emerald-600 hover:to-emerald-400 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:ring-0"
+            className={[
+              'group inline-flex items-center gap-3 rounded-full px-9 py-4 text-base font-semibold shadow-lg ring-1 ring-inset transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+              loading
+                ? 'cursor-wait bg-gradient-to-r from-navy-700 to-navy-500 text-white shadow-navy-900/25 ring-white/20 focus-visible:ring-navy-400'
+                : 'bg-gradient-to-r from-emerald-700 to-emerald-500 text-white shadow-emerald-900/25 ring-white/20 hover:from-emerald-600 hover:to-emerald-400 hover:shadow-xl focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:ring-0',
+            ].join(' ')}
           >
             {loading ? <Loader2 size={20} className="animate-spin" /> : <ShieldCheck size={20} />}
             {loading ?? 'Generar registro oficial'}
           </button>
+          {loading && (
+            <p className="flex items-center gap-1.5 text-[12px] text-slate-500">
+              Esto puede tardar unos segundos: no cierre ni recargue la ventana.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -227,7 +237,7 @@ function Receipt({
           onAnimationComplete={() => setFlash(false)}
           className={['relative overflow-hidden', ok ? '' : 'bg-amber-50'].join(' ')}
         >
-          <SelloDeAgua opacity={0.05} />
+          <SelloDeAgua opacity={0.05} height={640} />
 
           <div className="relative">
             {/* Encabezado del cuadro: el resultado y su número, en una línea. */}
@@ -284,7 +294,14 @@ function Receipt({
                 </details>
               )}
 
-              <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-3">
+              {correo && (
+                <p className="mt-3 flex items-center gap-1.5 text-[12px] text-slate-600">
+                  <Mail size={13} className="shrink-0 text-sky-700" />
+                  Se envió el registro a <strong className="text-navy-900">{correo}</strong>.
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-3">
                 <button
                   type="button"
                   className="btn-primary"
@@ -306,13 +323,6 @@ function Receipt({
                   Auditar otro lote
                 </button>
               </div>
-
-              {correo && (
-                <p className="mt-2 flex items-center gap-1.5 text-[12px] text-slate-600">
-                  <Mail size={13} className="shrink-0 text-sky-700" />
-                  Se envió el registro a <strong className="text-navy-900">{correo}</strong>.
-                </p>
-              )}
 
               {IS_DEMO && (
                 <p className="mt-1 text-[11px] leading-snug text-slate-500">
