@@ -83,6 +83,52 @@ export function isGraphReady(config: SharePointConfig): boolean {
   return porId || porRuta;
 }
 
+/* ------------------------------------------------------------------ */
+/* Facultad y responsable recordados                                    */
+/* ------------------------------------------------------------------ */
+
+const RESPONSABLE_STORAGE_KEY = 'auditor-certificados.responsable.v1';
+
+export interface RememberedResponsable {
+  oficina: string;
+  responsable: string;
+  correoResponsable: string;
+}
+
+const EMPTY_REMEMBERED: RememberedResponsable = {
+  oficina: '',
+  responsable: '',
+  correoResponsable: '',
+};
+
+/**
+ * Facultad, responsable y correo de la última vez: quien registra suele ser
+ * siempre la misma persona, así que no tiene sentido pedírselos en cada
+ * lote. Vive en el navegador de quien usa la app, no en el archivo `.env`.
+ */
+export function loadRememberedResponsable(): RememberedResponsable {
+  try {
+    const stored = window.localStorage.getItem(RESPONSABLE_STORAGE_KEY);
+    if (!stored) return EMPTY_REMEMBERED;
+    const parsed = JSON.parse(stored) as Partial<RememberedResponsable>;
+    return {
+      oficina: parsed.oficina ?? '',
+      responsable: parsed.responsable ?? '',
+      correoResponsable: parsed.correoResponsable ?? '',
+    };
+  } catch {
+    return EMPTY_REMEMBERED;
+  }
+}
+
+export function saveRememberedResponsable(data: RememberedResponsable): void {
+  try {
+    window.localStorage.setItem(RESPONSABLE_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Sin almacenamiento disponible: simplemente no se recuerda.
+  }
+}
+
 /** `true` si el webhook está configurado. */
 export function isWebhookReady(config: SharePointConfig): boolean {
   return Boolean(config.webhook?.url);

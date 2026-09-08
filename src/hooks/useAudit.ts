@@ -5,7 +5,13 @@
 
 import { useCallback, useMemo, useState } from 'react';
 
-import { effectiveMode, loadConfig, saveConfig } from '../config/appConfig';
+import {
+  effectiveMode,
+  loadConfig,
+  loadRememberedResponsable,
+  saveConfig,
+  saveRememberedResponsable,
+} from '../config/appConfig';
 import {
   computeMetrics,
   isBatchClean,
@@ -57,16 +63,24 @@ import type {
   WizardStep,
 } from '../types';
 
-const EMPTY_METADATA: BatchMetadata = {
-  curso: '',
-  oficina: '',
-  responsable: '',
-  correoResponsable: '',
-  fechaInicio: '',
-  fechaRegistro: '',
-  intensidad: '',
-  archivoOriginal: '',
-};
+/**
+ * Metadatos en blanco para un lote nuevo, salvo la facultad, el responsable y
+ * su correo: esos se recuerdan de la última vez (ver `appConfig.ts`), porque
+ * casi siempre los registra la misma persona.
+ */
+function emptyMetadata(): BatchMetadata {
+  const recordado = loadRememberedResponsable();
+  return {
+    curso: '',
+    oficina: recordado.oficina,
+    responsable: recordado.responsable,
+    correoResponsable: recordado.correoResponsable,
+    fechaInicio: '',
+    fechaRegistro: '',
+    intensidad: '',
+    archivoOriginal: '',
+  };
+}
 
 export interface AuditState {
   step: WizardStep;
@@ -88,7 +102,18 @@ export function useAudit() {
   const [step, setStep] = useState<WizardStep>('upload');
   const [parsed, setParsed] = useState<ParsedTemplate | null>(null);
   const [rows, setRows] = useState<StudentRow[]>([]);
-  const [metadata, setMetadata] = useState<BatchMetadata>(EMPTY_METADATA);
+  const [metadata, setMetadataState] = useState<BatchMetadata>(emptyMetadata);
+
+  // Cada vez que cambian facultad, responsable o correo, quedan recordados
+  // para el próximo lote (y la próxima vez que se abra la app).
+  const setMetadata = useCallback((next: BatchMetadata) => {
+    setMetadataState(next);
+    saveRememberedResponsable({
+      oficina: next.oficina,
+      responsable: next.responsable,
+      correoResponsable: next.correoResponsable,
+    });
+  }, []);
   const [config, setConfig] = useState<SharePointConfig>(() => loadConfig());
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
   const [lastPosition, setLastPosition] = useState<LedgerPosition>(DEFAULT_LAST_POSITION);
@@ -129,13 +154,14 @@ export function useAudit() {
       const suggestion = dominant ? suggestOffice(dominant) : null;
       const first = validated[0];
 
+      const recordado = loadRememberedResponsable();
       setParsed({ ...template, rows: validated });
       setRows(validated);
       setMetadata({
         curso: dominant ?? '',
-        oficina: suggestion?.oficina ?? '',
-        responsable: '',
-        correoResponsable: '',
+        oficina: suggestion?.oficina ?? recordado.oficina,
+        responsable: recordado.responsable,
+        correoResponsable: recordado.correoResponsable,
         fechaInicio: first?.cells.fechainicio?.value ?? '',
         fechaRegistro: first?.cells.fechaemite?.value ?? '',
         intensidad: first?.cells.intensidad?.value ?? '',
@@ -152,7 +178,7 @@ export function useAudit() {
   const reset = useCallback(() => {
     setParsed(null);
     setRows([]);
-    setMetadata(EMPTY_METADATA);
+    setMetadataState(emptyMetadata());
     setResult(null);
     setError(null);
     setStep('upload');
