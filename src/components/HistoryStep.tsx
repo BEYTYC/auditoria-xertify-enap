@@ -8,7 +8,7 @@
  * de Datos que el último registro quedó donde debía.
  */
 
-import { BadgeCheck, Ban, Download, History, ShieldCheck, Trash2 } from 'lucide-react';
+import { BadgeCheck, Ban, Download, History, Loader2, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { base64ToBlob, downloadBlob } from '../services/excelService';
@@ -234,8 +234,8 @@ function AdminBar({
             disabled={!!loading}
             onClick={onValidarUltimo}
           >
-            <BadgeCheck size={15} />
-            Validar el último registro
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <BadgeCheck size={15} />}
+            {loading ?? 'Validar el último registro'}
           </button>
           <button
             type="button"
@@ -278,7 +278,14 @@ function AdminBar({
         </div>
       )}
 
-      {mensaje && (
+      {loading && (
+        <p className="mt-2 flex items-center gap-1.5 text-[13px] text-navy-700">
+          <Loader2 size={14} className="animate-spin" />
+          {loading}
+        </p>
+      )}
+
+      {!loading && mensaje && (
         <p className="mt-2 text-[13px] leading-relaxed text-navy-900">{mensaje}</p>
       )}
 

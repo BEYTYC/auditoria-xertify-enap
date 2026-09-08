@@ -326,7 +326,7 @@ export interface SharePointConfig {
   webhook?: WebhookConfig;
 }
 
-export type RegistrationOutcome = 'success' | 'fallback' | 'error';
+export type RegistrationOutcome = 'success' | 'error';
 
 export interface RegistrationResult {
   outcome: RegistrationOutcome;

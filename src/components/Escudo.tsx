@@ -15,6 +15,7 @@
 import escudoBlanco from '../assets/escudo-blanco.png';
 import escudoOscuro from '../assets/escudo-sobre-oscuro.png';
 import escudoColor from '../assets/escudo.png';
+import escudoMarcaDeAgua from '../assets/escudo-marca-agua.png';
 import { INSTITUCION } from '../data/brand';
 
 type Variante = 'color' | 'blanco' | 'sobre-oscuro';
@@ -77,9 +78,9 @@ export function SelloDeAgua({
 }: {
   opacity?: number;
   /**
-   * Alto en píxeles. El archivo fuente mide 320px de alto, así que por
-   * encima de eso se está ampliando: a esta opacidad tan baja el ligero
-   * desenfoque no se nota, y por debajo del contenedor se recorta solo
+   * Alto en píxeles. La fuente (`escudo-marca-agua.png`) ya viene ampliada
+   * 3× (a 696×960) con reescalado Lanczos y un enfoque suave, así que se ve
+   * nítida hasta ese tamaño; por debajo del contenedor se recorta solo
    * (`overflow-hidden` en el envoltorio).
    */
   height?: number;
@@ -90,7 +91,7 @@ export function SelloDeAgua({
       className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
     >
       <img
-        src={escudoColor}
+        src={escudoMarcaDeAgua}
         alt=""
         className="w-auto max-w-none"
         style={{ opacity, height }}

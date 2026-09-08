@@ -23,7 +23,6 @@ import { buildDatabaseRows } from './databaseService';
 import { allocate, buildBatchId, describeAllocation } from './numberingService';
 import {
   createAdapter,
-  MockAdapter,
   SharePointError,
   type SharePointAdapter,
   type TableInfo,
@@ -245,8 +244,10 @@ export function removeLogEntry(idRegistro: string): LogEntry[] {
 }
 
 /**
- * Genera el Registro Oficial. Si el envío falla, guarda el lote en el registro
- * local para que no se pierda y devuelve `fallback` en lugar de `success`.
+ * Genera el Registro Oficial. Si el envío a SharePoint falla, no se genera
+ * nada: no se guarda respaldo local ni se deja renglón en la bitácora, para
+ * no dar por asentado un lote que en realidad no llegó al libro. Se devuelve
+ * `error` y el responsable reintenta cuando el servicio esté disponible.
  */
 export async function registerBatch(
   request: RegistrationRequest,
@@ -312,32 +313,16 @@ export async function registerBatch(
           ? error.message
           : String(error);
 
-    // Respaldo local para no perder el lote auditado.
-    let fallbackOk = false;
-    try {
-      await new MockAdapter().append(databaseRows, request.optionalColumns ?? []);
-      fallbackOk = true;
-    } catch {
-      fallbackOk = false;
-    }
-
-    appendLog({
-      ...baseLog,
-      estado: 'REGISTRO FALLIDO',
-      outcome: fallbackOk ? 'fallback' : 'error',
-      mode: adapter.mode,
-      syncedToSharePoint: false,
-    });
-
+    // No se respalda nada ni se deja renglón en la bitácora: si no llegó a
+    // SharePoint, el lote no quedó registrado en ningún lado.
     return {
-      outcome: fallbackOk ? 'fallback' : 'error',
+      outcome: 'error',
       mode: adapter.mode,
       receipt: { ...receipt, estado: 'REGISTRO FALLIDO' },
       rowsSent: 0,
-      message: fallbackOk
-        ? 'No se pudo escribir en SharePoint. El lote quedó guardado en el registro local: ' +
-          'puede exportarlo y pegarlo en la Base de Datos, o reintentar cuando se restablezca el servicio.'
-        : 'No se pudo escribir en SharePoint ni guardar el respaldo local. Exporte el CSV del lote antes de cerrar.',
+      message:
+        'No se pudo escribir en SharePoint: el lote NO quedó registrado. Corrija la conexión y ' +
+        'vuelva a intentarlo; no se guardó ningún respaldo local.',
       errorDetail: detail,
       completedAt: new Date().toISOString(),
     };

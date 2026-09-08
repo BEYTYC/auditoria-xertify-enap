@@ -260,6 +260,36 @@ export class GraphAdapter implements SharePointAdapter {
     };
   }
 
+  /**
+   * Cuando Graph rechaza `rows/add` por dimensiones, compara cuántas columnas
+   * mandó la app contra las que la tabla real tiene en ese momento, para que
+   * el error diga la causa exacta en vez de dejarlo a adivinar.
+   */
+  private async describeColumnMismatch(
+    enviadas: number,
+    headers: HeadersInit,
+    base: string,
+  ): Promise<string | null> {
+    if (!enviadas) return null;
+    try {
+      const graph = this.config.graph!;
+      const response = await fetchWithRetry(
+        `${base}/tables/${encodeURIComponent(graph.tableId)}/columns?$select=name`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) return null;
+      const body = (await response.json()) as { value: { name: string }[] };
+      const reales = body.value.length;
+      if (reales === enviadas) return null;
+      return (
+        `La app envió ${enviadas} columna(s) y la tabla real tiene ${reales}: ` +
+        `${body.value.map((c) => c.name).join(', ')}.`
+      );
+    } catch {
+      return null;
+    }
+  }
+
   async inspect(): Promise<TableInfo> {
     const graph = this.config.graph!;
     const headers = await this.headers();
@@ -280,8 +310,13 @@ export class GraphAdapter implements SharePointAdapter {
     const columnsBody = (await columnsResponse.json()) as { value: { name: string }[] };
     const columns = columnsBody.value.map((column) => column.name);
 
+    // Comparación sin distinguir mayúsculas ni espacios sobrantes: la columna
+    // se crea a mano en SharePoint y una diferencia de mayúscula («Director
+    // Firmante» en vez de «DIRECTOR FIRMANTE») no debe hacerla pasar por
+    // inexistente y descuadrar el número de columnas que se envían.
+    const columnsNorm = columns.map((name) => name.trim().toLocaleUpperCase('es-CO'));
     const availableOptionalColumns = DB_OPTIONAL_COLUMNS.filter((column) =>
-      columns.includes(column),
+      columnsNorm.includes(column.trim().toLocaleUpperCase('es-CO')),
     );
 
     // 2. Última posición del libro: se leen las últimas filas de la tabla.
@@ -431,12 +466,16 @@ export class GraphAdapter implements SharePointAdapter {
       );
 
       if (!response.ok) {
+        const detalle = await describeHttpError(response);
+        // El error de Graph no dice cuántas columnas espera: se averigua aparte
+        // para no dejar a ciegas cuando el desajuste es de número de columnas.
+        const desajuste = await this.describeColumnMismatch(chunk[0]?.length ?? 0, headers, base);
         throw new SharePointError(
           sent === 0
             ? 'SharePoint rechazó la inserción; no se escribió ninguna fila.'
             : `Se insertaron ${sent} filas y la operación falló en la siguiente tanda. ` +
               'Revise la Base de Datos antes de reintentar para no duplicar registros.',
-          await describeHttpError(response),
+          desajuste ? `${detalle} — ${desajuste}` : detalle,
           response.status,
         );
       }

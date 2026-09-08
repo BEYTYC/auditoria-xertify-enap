@@ -216,18 +216,18 @@ export default function App() {
         <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-2.5 sm:py-3">
           {/* Mismo escudo del membrete: fondo claro y halo blanco. */}
           <Escudo height={42} variant="sobre-oscuro" className="shrink-0" />
-          <div className="ml-3 min-w-0 leading-snug sm:ml-4">
+          <div className="ml-3 min-w-0 leading-tight sm:ml-4">
             <p className="truncate text-[12px] text-white">{INSTITUCION.dependencia}</p>
             <p className="truncate text-[13px] font-semibold text-gold-400">
               {INSTITUCION.sistema}
             </p>
           </div>
 
-          <div className="ml-auto shrink-0 text-right">
+          <div className="ml-auto shrink-0 text-right leading-tight">
             <p className="text-[12px] font-semibold text-slate-200">
               Desarrollado por PD02 Beyty P. Camargo M.
             </p>
-            <p className="mt-0.5 text-[11px] text-navy-300">Jefe de Estadística ENAP</p>
+            <p className="mt-0 text-[11px] text-navy-300">Jefe de Estadística ENAP</p>
           </div>
         </div>
       </footer>

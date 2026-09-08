@@ -8,7 +8,6 @@ import {
   AlertCircle,
   BookOpen,
   CheckCircle2,
-  CloudOff,
   ExternalLink,
   FileSpreadsheet,
   Loader2,
@@ -16,7 +15,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import {
   duplicateMessage,
@@ -217,10 +216,6 @@ function Receipt({
   const { receipt } = result;
   const correo = metadata.correoResponsable.trim();
 
-  // El destello verde y el chulo grande son la confirmación visual de que el
-  // registro quedó en pie; se apagan solos para no dejar la pantalla verde.
-  const [flash, setFlash] = useState(ok);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -230,37 +225,35 @@ function Receipt({
       {/* Un solo documento: membrete, encabezado del registro, datos y entrega
           del archivo, todo sobre el sello de la Escuela. */}
       <div className="card overflow-hidden">
-        <motion.div
-          initial={ok ? { backgroundColor: 'rgb(209,250,229)' } : undefined}
-          animate={{ backgroundColor: 'rgb(255,255,255)' }}
-          transition={{ duration: 1.6, ease: 'easeOut' }}
-          onAnimationComplete={() => setFlash(false)}
-          className={['relative overflow-hidden', ok ? '' : 'bg-amber-50'].join(' ')}
-        >
+        {/* El verde o el rojo claro quedan fijos: es la confirmación de que el
+            registro quedó (o no quedó) en pie, y no debe desaparecer solo. */}
+        <div className={['relative overflow-hidden', ok ? 'bg-emerald-50' : 'bg-rose-50'].join(' ')}>
           <SelloDeAgua opacity={0.05} height={640} />
 
           <div className="relative">
             {/* Encabezado del cuadro: el resultado y su número, en una línea. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b-2 border-gold-500 px-6 py-3">
+            <div
+              className={[
+                'flex flex-wrap items-center gap-x-4 gap-y-1 border-b-2 px-6 py-3',
+                ok ? 'border-emerald-500' : 'border-rose-500',
+              ].join(' ')}
+            >
               <AnimatePresence>
                 <motion.span
                   initial={{ scale: 0.4, opacity: 0 }}
-                  animate={{ scale: ok ? [0.4, 1.3, 1] : 1, opacity: 1 }}
+                  animate={{ scale: [0.4, 1.3, 1], opacity: 1 }}
                   transition={{ type: 'spring', stiffness: 220, damping: 16, duration: 0.6 }}
                   className="inline-flex"
                 >
                   {ok ? (
-                    <CheckCircle2
-                      size={ok && flash ? 36 : 26}
-                      className="text-emerald-600 transition-[width,height] duration-500"
-                    />
+                    <CheckCircle2 size={30} className="text-emerald-600" />
                   ) : (
-                    <CloudOff size={26} className="text-amber-600" />
+                    <ShieldAlert size={30} className="text-rose-600" />
                   )}
                 </motion.span>
               </AnimatePresence>
-              <h2 className="text-base font-semibold text-navy-900">
-                {ok ? 'Registro oficial generado' : 'El lote quedó respaldado, pero no llegó a SharePoint'}
+              <h2 className={['text-base font-semibold', ok ? 'text-navy-900' : 'text-rose-900'].join(' ')}>
+                {ok ? 'Registro oficial generado' : 'No se pudo registrar en SharePoint: el lote NO quedó asentado'}
               </h2>
               <span className="font-mono text-base font-semibold tracking-tight text-navy-900">
                 {receipt.idRegistro}
@@ -294,7 +287,7 @@ function Receipt({
                 </details>
               )}
 
-              {correo && (
+              {ok && correo && (
                 <p className="mt-3 flex items-center gap-1.5 text-[12px] text-slate-600">
                   <Mail size={13} className="shrink-0 text-sky-700" />
                   Se envió el registro a <strong className="text-navy-900">{correo}</strong>.
@@ -332,7 +325,7 @@ function Receipt({
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </motion.div>
   );
