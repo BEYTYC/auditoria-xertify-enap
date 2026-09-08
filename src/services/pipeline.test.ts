@@ -200,6 +200,7 @@ describe('salidas del lote', () => {
         curso: 'English Intermediate - B1',
         oficina: 'DICSH - DIVISIÓN CIENCIAS SOCIALES',
         responsable: 'Registro y Control',
+        correoResponsable: 'responsable@enap.edu.co',
         fechaInicio: '12 de enero de 2026',
         fechaRegistro: '14 de julio de 2026',
         intensidad: '120',

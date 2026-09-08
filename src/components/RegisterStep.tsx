@@ -12,10 +12,11 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Loader2,
+  Mail,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   duplicateMessage,
@@ -35,6 +36,8 @@ const IS_DEMO = import.meta.env.VITE_DEMO === '1';
 
 /** Generador de certificados de Xertify, donde se carga el archivo corregido. */
 const XERTIFY_GENERATOR_URL = 'https://generador.xertify.co/';
+
+const EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 interface RegisterStepProps {
   preview: RegistrationPreview | null;
@@ -82,7 +85,11 @@ function Confirmation({
   onVerBitacora,
 }: RegisterStepProps & { preview: RegistrationPreview }) {
   const listo =
-    clean && Boolean(metadata.oficina) && Boolean(metadata.responsable.trim()) && !duplicado;
+    clean &&
+    Boolean(metadata.oficina) &&
+    Boolean(metadata.responsable.trim()) &&
+    EMAIL_PATTERN.test(metadata.correoResponsable.trim()) &&
+    !duplicado;
   const { receipt } = preview;
   const missingOptional =
     tableInfo && !tableInfo.availableOptionalColumns.includes('DIRECTOR FIRMANTE');
@@ -192,20 +199,17 @@ function Confirmation({
 
 function Receipt({
   result,
+  metadata,
   onDownloadCorrected,
   onReset,
 }: RegisterStepProps & { result: RegistrationResult }) {
   const ok = result.outcome === 'success';
   const { receipt } = result;
+  const correo = metadata.correoResponsable.trim();
 
-  // El archivo corregido se entrega solo: es el paso siguiente del trámite y
-  // no hay razón para pedir un clic más.
-  const yaDescargado = useRef(false);
-  useEffect(() => {
-    if (yaDescargado.current) return;
-    yaDescargado.current = true;
-    onDownloadCorrected(receipt.idRegistro);
-  }, [onDownloadCorrected, receipt.idRegistro]);
+  // El destello verde y el chulo grande son la confirmación visual de que el
+  // registro quedó en pie; se apagan solos para no dejar la pantalla verde.
+  const [flash, setFlash] = useState(ok);
 
   return (
     <motion.div
@@ -216,39 +220,48 @@ function Receipt({
       {/* Un solo documento: membrete, encabezado del registro, datos y entrega
           del archivo, todo sobre el sello de la Escuela. */}
       <div className="card overflow-hidden">
-        <div className={['relative overflow-hidden bg-white', ok ? '' : 'bg-amber-50'].join(' ')}>
+        <motion.div
+          initial={ok ? { backgroundColor: 'rgb(209,250,229)' } : undefined}
+          animate={{ backgroundColor: 'rgb(255,255,255)' }}
+          transition={{ duration: 1.6, ease: 'easeOut' }}
+          onAnimationComplete={() => setFlash(false)}
+          className={['relative overflow-hidden', ok ? '' : 'bg-amber-50'].join(' ')}
+        >
           <SelloDeAgua opacity={0.05} />
 
           <div className="relative">
             {/* Encabezado del cuadro: el resultado y su número, en una línea. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b-2 border-gold-500 px-8 py-5">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b-2 border-gold-500 px-6 py-3">
               <AnimatePresence>
                 <motion.span
-                  initial={{ scale: 0.7, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+                  initial={{ scale: 0.4, opacity: 0 }}
+                  animate={{ scale: ok ? [0.4, 1.3, 1] : 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 16, duration: 0.6 }}
                   className="inline-flex"
                 >
                   {ok ? (
-                    <CheckCircle2 size={28} className="text-emerald-600" />
+                    <CheckCircle2
+                      size={ok && flash ? 36 : 26}
+                      className="text-emerald-600 transition-[width,height] duration-500"
+                    />
                   ) : (
-                    <CloudOff size={28} className="text-amber-600" />
+                    <CloudOff size={26} className="text-amber-600" />
                   )}
                 </motion.span>
               </AnimatePresence>
-              <h2 className="text-lg font-semibold text-navy-900">
+              <h2 className="text-base font-semibold text-navy-900">
                 {ok ? 'Registro oficial generado' : 'El lote quedó respaldado, pero no llegó a SharePoint'}
               </h2>
-              <span className="font-mono text-lg font-semibold tracking-tight text-navy-900">
+              <span className="font-mono text-base font-semibold tracking-tight text-navy-900">
                 {receipt.idRegistro}
               </span>
             </div>
 
-            <div className="px-8 py-6">
-              <h3 className="mb-4 text-sm font-semibold text-navy-900">
+            <div className="px-6 py-4">
+              <h3 className="mb-2 text-sm font-semibold text-navy-900">
                 Datos registrados en Oficina de Estadística
               </h3>
-              <dl className="grid gap-x-10 gap-y-5 text-sm sm:grid-cols-3">
+              <dl className="grid gap-x-10 gap-y-3 text-sm sm:grid-cols-3">
                 <Detail label="Fecha y hora" value={receipt.fechaHoraLegible} />
                 <Detail label="Curso" value={toDisplayTitle(receipt.curso)} />
                 <Detail label="Facultad u oficina" value={officeLabel(receipt.oficina)} />
@@ -260,10 +273,10 @@ function Receipt({
                 <Detail label="Referencia de auditoría" value={receipt.referenciaAuditoria} />
               </dl>
 
-              {!ok && <p className="mt-3 text-[13px] text-slate-700">{result.message}</p>}
+              {!ok && <p className="mt-2 text-[13px] text-slate-700">{result.message}</p>}
 
               {result.errorDetail && (
-                <details className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs text-slate-600">
+                <details className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-xs text-slate-600">
                   <summary className="cursor-pointer font-medium">
                     Detalle técnico del error
                   </summary>
@@ -271,17 +284,14 @@ function Receipt({
                 </details>
               )}
 
-              <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-4">
-                <p className="text-[12px] text-slate-600">
-                  La descarga del archivo corregido para Xertify empieza sola.
-                </p>
+              <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-3">
                 <button
                   type="button"
-                  className="btn-secondary"
+                  className="btn-primary"
                   onClick={() => onDownloadCorrected(receipt.idRegistro)}
                 >
                   <FileSpreadsheet size={15} />
-                  Descargar de nuevo
+                  Descargar archivo corregido
                 </button>
                 <a
                   href={XERTIFY_GENERATOR_URL}
@@ -297,15 +307,22 @@ function Receipt({
                 </button>
               </div>
 
+              {correo && (
+                <p className="mt-2 flex items-center gap-1.5 text-[12px] text-slate-600">
+                  <Mail size={13} className="shrink-0 text-sky-700" />
+                  Se envió el registro a <strong className="text-navy-900">{correo}</strong>.
+                </p>
+              )}
+
               {IS_DEMO && (
-                <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                <p className="mt-1 text-[11px] leading-snug text-slate-500">
                   En esta demo publicada el visor bloquea las descargas. En la aplicación
-                  instalada el archivo corregido se descarga solo al generar el registro.
+                  instalada el archivo corregido se descarga al hacer clic en el botón.
                 </p>
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </motion.div>
   );

@@ -283,8 +283,16 @@ function extractRank(raw: string): string | null {
 }
 
 /**
- * `true` si el texto abre con un grado reconocido —militar (`CA`, `TE`…) o
- * civil (`DO`)—, en cualquier combinación de mayúsculas o minúsculas.
+ * `true` si la primera palabra es una sigla válida de grado: al menos dos
+ * letras, en cualquier combinación de mayúsculas o minúsculas —no hace falta
+ * que esté en el catálogo de grados militares, porque la Infantería de
+ * Marina y el personal civil usan siglas que no siempre coinciden con esa
+ * lista («DO», «OD», «PD»…)—.
+ *
+ * No se descarta por coincidir con un conector de apellido («do», «de»…):
+ * en este campo la primera palabra siempre es el grado, nunca un conector,
+ * así que aplicar esa lista aquí solo reintroduciría el problema original
+ * («DO» leído como el conector portugués en vez de como grado).
  *
  * La usa el campo «Responsable que valida»: ese responsable siempre firma
  * con su grado, así que el campo no se da por completo si falta.
@@ -292,8 +300,26 @@ function extractRank(raw: string): string | null {
 export function startsWithGrado(raw: string): boolean {
   const first = collapseSpaces(raw).split(' ')[0] ?? '';
   if (!first) return false;
-  const upper = stripAccents(first).toLocaleUpperCase('es-CO');
-  return MILITARY_RANKS.has(upper) || CIVILIAN_TITLES.has(upper);
+  const bare = first.replace(/[’'-]/g, '');
+  return /^\p{L}{2,}$/u.test(bare);
+}
+
+/**
+ * Ortografía canónica del campo «Responsable que valida»: la primera palabra
+ * siempre es el grado en siglas y en mayúscula —sin importar cómo se haya
+ * escrito—, y el resto sigue las mismas reglas de un nombre (`canonicalName`).
+ */
+export function canonicalResponsable(raw: string): string {
+  const cleaned = cleanNameChars(raw);
+  const words = cleaned.split(' ');
+  const first = words[0] ?? '';
+
+  if (!startsWithGrado(first)) return canonicalName(raw);
+
+  const grado = stripAccents(first).toLocaleUpperCase('es-CO');
+  const resto = words.slice(1).join(' ');
+  const restoCanonico = resto ? canonicalName(resto) : '';
+  return restoCanonico ? `${grado} ${restoCanonico}` : grado;
 }
 
 /**

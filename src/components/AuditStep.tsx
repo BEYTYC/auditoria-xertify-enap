@@ -9,12 +9,20 @@
  * a cargar el archivo.
  */
 
-import { ArrowRight, CircleCheck, Columns3, Download, TriangleAlert, UploadCloud } from 'lucide-react';
+import {
+  ArrowRight,
+  CircleCheck,
+  Columns3,
+  Download,
+  Mail,
+  TriangleAlert,
+  UploadCloud,
+} from 'lucide-react';
 import { useMemo } from 'react';
 
 import { FIELD_LIST, FIELD_SPECS } from '../data/fields';
 import { OFICINAS_RESPONSABLES, officeLabel, suggestOffice } from '../services/officeService';
-import { canonicalName, startsWithGrado } from '../services/validatorService';
+import { canonicalResponsable, startsWithGrado } from '../services/validatorService';
 import type { BatchMetrics } from '../services/correctorService';
 import type { BatchMetadata, CanonicalField, ColumnMapping } from '../types';
 
@@ -24,6 +32,9 @@ import type { BatchMetadata, CanonicalField, ColumnMapping } from '../types';
  * Portal Estadístico en vez de intentar mapearlos a mano.
  */
 const OLD_TEMPLATE_HEADERS = new Set(['fechafin']);
+
+/** Validación liviana del correo del responsable, solo para habilitar el paso. */
+const EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 interface AuditStepProps {
   activeFields: Set<CanonicalField>;
@@ -65,7 +76,8 @@ export function AuditStep({
     clean &&
     Boolean(metadata.oficina) &&
     Boolean(metadata.responsable.trim()) &&
-    startsWithGrado(metadata.responsable);
+    startsWithGrado(metadata.responsable) &&
+    EMAIL_PATTERN.test(metadata.correoResponsable.trim());
 
   const suggestion = useMemo(
     () => (metadata.curso ? suggestOffice(metadata.curso) : null),
@@ -295,6 +307,9 @@ function OfficePanel({
   const responsableTieneGrado = startsWithGrado(metadata.responsable);
   const responsableValido = responsableEscrito && responsableTieneGrado;
 
+  const correoEscrito = metadata.correoResponsable.trim().length > 0;
+  const correoValido = EMAIL_PATTERN.test(metadata.correoResponsable.trim());
+
   return (
     <section className="card p-4 text-left">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -341,18 +356,47 @@ function OfficePanel({
             value={metadata.responsable}
             // Mientras se escribe se deja el texto tal cual: transformarlo en cada
             // tecla —como antes— borra el espacio que la persona acaba de poner
-            // (canonicalName recorta espacios finales) y pega las palabras entre
-            // sí. El formato correcto —grado en siglas y mayúscula, apellidos y
-            // nombres capitalizados— se aplica una sola vez, al salir del campo.
+            // (canonicalResponsable recorta espacios finales) y pega las palabras
+            // entre sí. El formato correcto —grado en siglas y mayúscula, apellidos
+            // y nombres capitalizados— se aplica una sola vez, al salir del campo.
             onChange={(event) => onMetadata({ ...metadata, responsable: event.target.value })}
             onBlur={() =>
-              onMetadata({ ...metadata, responsable: canonicalName(metadata.responsable) })
+              onMetadata({ ...metadata, responsable: canonicalResponsable(metadata.responsable) })
             }
           />
           {responsableEscrito && !responsableTieneGrado && (
             <p className="mt-1.5 text-[11px] text-rose-600">
-              Falta el grado en siglas al comienzo, p. ej. «CA», «TE» o «DO».
+              Falta el grado en siglas al comienzo, p. ej. «DO», «OD» o «PD».
             </p>
+          )}
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="correoResponsable">
+            Correo electrónico del responsable <Obligatorio />
+          </label>
+          <div
+            className={`field flex items-center gap-2 ${correoValido ? '' : 'border-rose-300'}`}
+          >
+            <Mail size={15} className="shrink-0 text-slate-400" />
+            <input
+              id="correoResponsable"
+              type="email"
+              required
+              aria-required
+              placeholder="responsable@enap.edu.co"
+              value={metadata.correoResponsable}
+              onChange={(event) =>
+                onMetadata({ ...metadata, correoResponsable: event.target.value })
+              }
+              className="w-full bg-transparent outline-none"
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            Ahí se envía el comprobante del registro con el archivo corregido.
+          </p>
+          {correoEscrito && !correoValido && (
+            <p className="mt-1 text-[11px] text-rose-600">No es un correo válido.</p>
           )}
         </div>
       </div>

@@ -77,7 +77,15 @@ export function SelloDeAgua({ opacity = 0.07 }: { opacity?: number }) {
       aria-hidden
       className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
     >
-      <img src={escudoColor} alt="" className="h-[135%] w-auto max-w-none" style={{ opacity }} />
+      {/* El archivo fuente mide 320px de alto: se muestra a ese tamaño (o
+          cerca) para no ampliarlo más de su resolución real, que es lo que
+          lo hacía ver borroso al estirarlo al 135% del contenedor. */}
+      <img
+        src={escudoColor}
+        alt=""
+        className="h-[320px] max-h-full w-auto max-w-none"
+        style={{ opacity }}
+      />
     </div>
   );
 }

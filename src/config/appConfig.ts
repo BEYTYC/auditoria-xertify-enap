@@ -50,7 +50,13 @@ export function loadConfig(): SharePointConfig {
     const parsed = JSON.parse(stored) as Partial<SharePointConfig>;
     return {
       mode: parsed.mode ?? base.mode,
-      graph: { ...base.graph!, ...(parsed.graph ?? {}) },
+      // El `redirectUri` nunca se toma de lo guardado: si quedó grabado
+      // desde una sesión abierta en otra dirección (p. ej. localhost:5173,
+      // el puerto de desarrollo), el inicio de sesión de Microsoft intentaría
+      // volver a una dirección que ya no existe. Siempre se usa la dirección
+      // real donde la app se está ejecutando ahora mismo (o la de la
+      // variable de entorno, si se fijó al compilar).
+      graph: { ...base.graph!, ...(parsed.graph ?? {}), redirectUri: base.graph!.redirectUri },
       webhook: { ...base.webhook!, ...(parsed.webhook ?? {}) },
     };
   } catch {

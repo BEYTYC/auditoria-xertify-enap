@@ -10,7 +10,6 @@ import { useState } from 'react';
 import { AuditStep } from './components/AuditStep';
 import { Escudo, MarcaDeAgua } from './components/Escudo';
 import { HistoryStep } from './components/HistoryStep';
-import { LoginScreen } from './components/LoginScreen';
 import { RegisterStep } from './components/RegisterStep';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Stepper } from './components/Stepper';
@@ -46,21 +45,9 @@ export default function App() {
     );
   };
 
-  if (!auth.isAuthenticated) {
-    return (
-      <LoginScreen
-        stage={auth.stage}
-        pendingEmail={auth.pendingEmail}
-        demoCode={auth.demoCode}
-        error={auth.error}
-        onRequestCode={auth.requestCode}
-        onVerifyCode={auth.verifyCode}
-        onResendCode={auth.resendCode}
-        onChangeEmail={auth.changeEmail}
-      />
-    );
-  }
-
+  // El acceso institucional se retiró de la entrada: la app abre directo en
+  // el asistente. El resto del estado de sesión (auth) se conserva porque
+  // sigue alimentando el panel de administración y el botón de cerrar sesión.
   return (
     /* Armazón fijo: el membrete y el pie quedan anclados; el desplazamiento
        ocurre solo dentro del área de trabajo. */
@@ -87,7 +74,7 @@ export default function App() {
                 <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-navy-300">
                   Sistema
                 </p>
-                <p className="text-[11px] font-medium text-white">
+                <p className="text-[13px] font-semibold text-white">
                   Auditoría de Plantillas Xertify y
                   <br />
                   Registro de Cursos de Extensión
@@ -114,12 +101,14 @@ export default function App() {
                     <span className="sr-only">Cerrar sesión</span>
                   </button>
                 </div>
-                <p
-                  className="hidden max-w-[180px] truncate text-[10px] text-navy-300 sm:block"
-                  title={auth.session?.email ?? ''}
-                >
-                  {auth.session?.email ?? ''}
-                </p>
+                {auth.session?.email && (
+                  <p
+                    className="hidden max-w-[180px] truncate text-[10px] text-navy-300 sm:block"
+                    title={auth.session.email}
+                  >
+                    {auth.session.email}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -224,15 +213,19 @@ export default function App() {
         <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-2.5 sm:py-3">
           {/* Mismo escudo del membrete: fondo claro y halo blanco. */}
           <Escudo height={42} variant="sobre-oscuro" className="shrink-0" />
-          <div className="ml-3 min-w-0 text-[10px] leading-snug sm:ml-4">
+          <div className="ml-3 min-w-0 leading-snug sm:ml-4">
             <p className="truncate text-[12px] text-white">{INSTITUCION.dependencia}</p>
-            <p className="truncate">{INSTITUCION.sistema}</p>
-            <p className="truncate text-navy-300">{INSTITUCION.ciudad}</p>
+            <p className="truncate text-[13px] font-semibold text-gold-400">
+              {INSTITUCION.sistema}
+            </p>
           </div>
 
-          <p className="ml-auto shrink-0 text-[12px] font-semibold text-slate-200">
-            Desarrollado por PD02 Beyty P. Camargo M.
-          </p>
+          <div className="ml-auto shrink-0 text-right">
+            <p className="text-[12px] font-semibold text-slate-200">
+              Desarrollado por PD02 Beyty P. Camargo M.
+            </p>
+            <p className="mt-0.5 text-[11px] text-navy-300">Jefe de Estadística ENAP</p>
+          </div>
         </div>
       </footer>
 

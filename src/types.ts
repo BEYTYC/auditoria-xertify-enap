@@ -201,6 +201,8 @@ export interface BatchMetadata {
   oficina: string;
   /** Persona que valida y firma la auditoría. */
   responsable: string;
+  /** Correo del responsable: ahí se envía el comprobante del registro. */
+  correoResponsable: string;
   /** Fecha de inicio, respaldo cuando la fila no trae `fechainicio`. */
   fechaInicio: string;
   /** Fecha de registro, respaldo cuando la fila no trae `fechaemite`. */
