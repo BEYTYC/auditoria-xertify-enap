@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Conexión con la Base de Datos de Cursos de Extensión (SharePoint)
+# Escuela Naval de Cadetes «Almirante Padilla» · Oficina de Estadística
+#
+# Los identificadores de la aplicación ya están registrados en Entra ID.
+# Se deja en `mock` hasta que la Dirección de TIC conceda el consentimiento de
+# administrador; ese día basta cambiar la primera línea a `graph`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+VITE_SHAREPOINT_MODE=mock
+
+VITE_GRAPH_CLIENT_ID=be68b5b7-e7eb-45e2-98f4-e5ffd88b8ce6
+VITE_GRAPH_TENANT_ID=f53f66b3-ea23-461a-b6ff-01654042a799
+
+# El archivo se ubica por su dueño y su ruta: no hace falta Graph Explorer.
+VITE_GRAPH_OWNER_UPN=jestadisticaplen@enap.edu.co
+VITE_GRAPH_FILE_PATH=Estadística/Bases de Datos/BD Cursos de Ley - Cursos de Extensión/Base de Datos Cursos de Extensión.xlsx
+
+# Solo si algún día se prefiere fijarlos a mano.
+VITE_GRAPH_DRIVE_ID=
+VITE_GRAPH_ITEM_ID=
+
+VITE_GRAPH_TABLE_ID=Tabla3
+VITE_GRAPH_WORKSHEET=Libro No. 2
+
+# No se fija: sin este valor, la app usa la dirección real desde la que se
+# esté ejecutando en cada momento (window.location.origin). Fijarlo aquí a
+# «http://localhost:5173» —el puerto de pruebas— fue justo lo que rompía el
+# inicio de sesión de Microsoft al abrir la app desde cualquier otro sitio.
+VITE_GRAPH_REDIRECT_URI=

@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* El visor compone la página sobre su propio fondo: se pinta explícito
+       para que la app no herede el tema oscuro del anfitrión. */
+    @apply bg-slate-50;
+  }
+  body {
+    @apply bg-slate-50 text-navy-900 antialiased;
+  }
+  ::selection {
+    @apply bg-navy-200;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-card;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+           transition focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-400
+           focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-navy-800 text-white hover:bg-navy-700 active:bg-navy-900;
+  }
+  .btn-secondary {
+    @apply btn border border-slate-300 bg-white text-navy-800 hover:bg-slate-50;
+  }
+  .btn-ghost {
+    @apply btn text-navy-600 hover:bg-slate-100;
+  }
+  .btn-success {
+    @apply btn bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700;
+  }
+  .field {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+           placeholder:text-slate-400 focus:border-navy-500 focus:outline-none
+           focus:ring-1 focus:ring-navy-500;
+  }
+  .label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+}
+
+/* La tabla de auditoría puede tener cientos de filas: se virtualiza el scroll
+   con contención de layout para que el navegador no repinte todo. */
+.audit-table-wrapper {
+  contain: paint;
+}
+
+/* Quien pide menos movimiento no recibe ninguno: la app se opera, no se mira. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

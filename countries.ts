@@ -1,0 +1,259 @@
+/**
+ * countries.ts
+ * Puente entre cómo escriben los usuarios el país (español, siglas, gentilicios)
+ * y cómo lo exige la lista Xertify (`Parameters!D4:D196`), que está en inglés
+ * para la mayoría de países pero en español para algunos (`Perú`, `Panamá`,
+ * `Brasil`, `Republica Dominicana`, `Trinidad y Tobago`).
+ */
+
+/**
+ * Alias normalizado (minúscula, sin tildes, sin puntuación) → país tal como
+ * aparece en la lista Xertify. Solo se listan los alias que NO coinciden ya
+ * con el nombre oficial; la coincidencia exacta se resuelve por separado.
+ */
+export const COUNTRY_ALIASES: Record<string, string> = {
+  // Colombia
+  co: 'Colombia',
+  col: 'Colombia',
+  colombiano: 'Colombia',
+  colombiana: 'Colombia',
+  'republica de colombia': 'Colombia',
+
+  // Hispanoamérica
+  ar: 'Argentina',
+  arg: 'Argentina',
+  argentino: 'Argentina',
+  bo: 'Bolivia',
+  bol: 'Bolivia',
+  boliviano: 'Bolivia',
+  br: 'Brasil',
+  bra: 'Brasil',
+  brazil: 'Brasil',
+  brasilero: 'Brasil',
+  brasileno: 'Brasil',
+  cl: 'Chile',
+  chi: 'Chile',
+  chileno: 'Chile',
+  cr: 'Costa Rica',
+  costarricense: 'Costa Rica',
+  cu: 'Cuba',
+  cub: 'Cuba',
+  cubano: 'Cuba',
+  ec: 'Ecuador',
+  ecu: 'Ecuador',
+  ecuatoriano: 'Ecuador',
+  ecuatoriana: 'Ecuador',
+  sv: 'El Salvador',
+  salvadoreno: 'El Salvador',
+  gt: 'Guatemala',
+  gua: 'Guatemala',
+  guatemalteco: 'Guatemala',
+  hn: 'Honduras',
+  hon: 'Honduras',
+  hondureno: 'Honduras',
+  mx: 'Mexico',
+  mex: 'Mexico',
+  mexico: 'Mexico',
+  mejico: 'Mexico',
+  mexicano: 'Mexico',
+  ni: 'Nicaragua',
+  nic: 'Nicaragua',
+  nicaraguense: 'Nicaragua',
+  pa: 'Panamá',
+  pan: 'Panamá',
+  panama: 'Panamá',
+  panameno: 'Panamá',
+  py: 'Paraguay',
+  pe: 'Perú',
+  per: 'Perú',
+  peru: 'Perú',
+  peruano: 'Perú',
+  peruana: 'Perú',
+  pr: 'Puerto Rico',
+  puertorriqueno: 'Puerto Rico',
+  do: 'Republica Dominicana',
+  rd: 'Republica Dominicana',
+  'republica dominicana': 'Republica Dominicana',
+  dominicano: 'Republica Dominicana',
+  dominicana: 'Republica Dominicana',
+  uy: 'Uruguay',
+  uru: 'Uruguay',
+  uruguayo: 'Uruguay',
+  ve: 'Venezuela',
+  ven: 'Venezuela',
+  venezolano: 'Venezuela',
+  venezolana: 'Venezuela',
+  'republica bolivariana de venezuela': 'Venezuela',
+
+  // Europa
+  albania: 'Albania',
+  alemania: 'Germany',
+  aleman: 'Germany',
+  de: 'Germany',
+  austria: 'Austria',
+  belgica: 'Belgium',
+  belga: 'Belgium',
+  bulgaria: 'Bulgaria',
+  chipre: 'Cyprus',
+  chequia: 'Czechia',
+  'republica checa': 'Czechia',
+  croacia: 'Croatia',
+  dinamarca: 'Denmark',
+  eslovaquia: 'Slovakia',
+  eslovenia: 'Slovenia',
+  espana: 'Spain',
+  es: 'Spain',
+  esp: 'Spain',
+  espanol: 'Spain',
+  espanola: 'Spain',
+  estonia: 'Estonia',
+  finlandia: 'Finland',
+  francia: 'France',
+  frances: 'France',
+  fr: 'France',
+  grecia: 'Greece',
+  hungria: 'Hungary',
+  irlanda: 'Ireland',
+  islandia: 'Iceland',
+  italia: 'Italy',
+  italiano: 'Italy',
+  it: 'Italy',
+  liechtenstein: 'Liechtenstein',
+  lituania: 'Lithuania',
+  luxemburgo: 'Luxembourg',
+  macedonia: 'North Macedonia',
+  'macedonia del norte': 'North Macedonia',
+  malta: 'Malta',
+  montenegro: 'Montenegro',
+  noruega: 'Norway',
+  'paises bajos': 'Netherlands',
+  holanda: 'Netherlands',
+  nl: 'Netherlands',
+  polonia: 'Poland',
+  portugal: 'Portugal',
+  portugues: 'Portugal',
+  pt: 'Portugal',
+  'reino unido': 'United Kingdom',
+  uk: 'United Kingdom',
+  gb: 'United Kingdom',
+  inglaterra: 'United Kingdom',
+  'gran bretana': 'United Kingdom',
+  rumania: 'Romania',
+  rusia: 'Russia',
+  ruso: 'Russia',
+  serbia: 'Serbia',
+  suecia: 'Sweden',
+  suiza: 'Switzerland',
+  suizo: 'Switzerland',
+  ch: 'Switzerland',
+  ucrania: 'Ukraine',
+
+  // América del Norte
+  ca: 'Canada',
+  can: 'Canada',
+  canada: 'Canada',
+  canadiense: 'Canada',
+  us: 'United States',
+  usa: 'United States',
+  eeuu: 'United States',
+  'ee uu': 'United States',
+  eua: 'United States',
+  'estados unidos': 'United States',
+  'estados unidos de america': 'United States',
+  norteamerica: 'United States',
+  estadounidense: 'United States',
+
+  // Resto del mundo
+  argelia: 'Algeria',
+  australia: 'Australia',
+  china: 'China',
+  chino: 'China',
+  cn: 'China',
+  'corea del sur': 'South Korea',
+  coreano: 'South Korea',
+  egipto: 'Egypt',
+  'emiratos arabes unidos': 'United Arab Emirates',
+  'hong kong': 'Hong Kong',
+  india: 'Republic of India',
+  hindu: 'Republic of India',
+  israel: 'Israel',
+  jordania: 'Jordan',
+  libano: 'Lebanon',
+  libia: 'Libya',
+  marruecos: 'Morocco',
+  'nueva zelanda': 'New Zealand',
+  'nueva zelandia': 'New Zealand',
+  nigeria: 'Nigeria',
+  palestina: 'Palestine',
+  qatar: 'Qatar',
+  singapur: 'Singapore',
+  siria: 'Syria',
+  sudafrica: 'South Africa',
+  taiwan: 'Taiwan',
+  'trinidad and tobago': 'Trinidad y Tobago',
+  'trinidad y tobago': 'Trinidad y Tobago',
+  tunez: 'Tunisia',
+  turquia: 'Turkey',
+};
+
+/** Abreviaturas usadas en la columna `TIPO DE DOC` de la Base de Datos. */
+export const DB_DOC_ABBREVIATIONS: Record<string, string> = {
+  'Cédula de ciudadanía': 'CC',
+  'Tarjeta de identidad': 'TI',
+  'Cédula de extranjería': 'CE',
+  'Registro civil': 'RC',
+  'Permiso por protección temporal': 'PPT',
+  NIT: 'NIT',
+  Pasaporte: 'PS',
+  Passport: 'PS',
+  PASSPORT: 'PS',
+};
+
+/** Abreviatura por defecto cuando el tipo no está en la tabla anterior. */
+export const DB_DOC_FALLBACK = 'CE';
+
+/**
+ * Variantes históricas encontradas en la Base de Datos que deben leerse
+ * como la abreviatura estandarizada.
+ */
+export const DB_ABBREVIATION_ALIASES: Record<string, string> = {
+  'c c': 'CC',
+  cc: 'CC',
+  't i': 'TI',
+  ti: 'TI',
+  'c e': 'CE',
+  ce: 'CE',
+  ps: 'PS',
+  pa: 'PS',
+  pp: 'PS',
+  pasaporte: 'PS',
+  ci: 'CE',
+  dni: 'CE',
+  cip: 'CE',
+  de: 'CE',
+  id: 'CE',
+  di: 'CE',
+  nui: 'CE',
+  nuip: 'RC',
+  dpi: 'CE',
+  te: 'CE',
+  dui: 'CE',
+  rc: 'RC',
+};
+
+/**
+ * Tipos admitidos con país «Colombia».
+ *
+ * La cédula de extranjería NO se acepta: el estudiante extranjero se
+ * identifica con el pasaporte o con el documento de identidad de su propio
+ * país (los que ofrezca la lista Xertify para ese país), nunca con un
+ * documento colombiano de extranjero.
+ */
+export const COLOMBIAN_ALLOWED_KINDS = [
+  'Cédula de ciudadanía',
+  'Tarjeta de identidad',
+  'Registro civil',
+];
+
+/** Formas en que la lista Xertify nombra un pasaporte. */
+export const PASSPORT_KINDS = ['Pasaporte', 'Passport', 'PASSPORT'];
