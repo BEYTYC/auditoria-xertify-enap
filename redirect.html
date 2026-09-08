@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Iniciando sesión…</title>
+  </head>
+  <body>
+    <p>Procesando el inicio de sesión…</p>
+    <script type="module">
+      // Puente de MSAL para el inicio de sesión emergente: recibe la
+      // respuesta de Microsoft y se la pasa a la ventana principal por
+      // BroadcastChannel, sin depender de `window.opener` —que Microsoft
+      // rompe a propósito con su cabecera Cross-Origin-Opener-Policy—.
+      // Documentado en @azure/msal-browser/redirect-bridge.
+      import { broadcastResponseToMainFrame } from '@azure/msal-browser/redirect-bridge';
+
+      broadcastResponseToMainFrame().catch((error) => {
+        console.error('Error al procesar el inicio de sesión:', error);
+      });
+    </script>
+  </body>
+</html>

@@ -30,7 +30,10 @@ export function defaultConfig(): SharePointConfig {
       filePath: read('VITE_GRAPH_FILE_PATH'),
       tableId: read('VITE_GRAPH_TABLE_ID', 'Tabla3'),
       worksheetName: read('VITE_GRAPH_WORKSHEET', 'Libro No. 2'),
-      redirectUri: read('VITE_GRAPH_REDIRECT_URI', window.location.origin),
+      // Apunta al puente de MSAL (`redirect.html`), no al `index.html`
+      // normal: si el login vuelve directo a la app completa, Microsoft
+      // nunca deja que esa ventana se cierre sola (ver sharepointService.ts).
+      redirectUri: read('VITE_GRAPH_REDIRECT_URI', `${window.location.origin}/redirect.html`),
     },
     webhook: {
       url: read('VITE_WEBHOOK_URL'),

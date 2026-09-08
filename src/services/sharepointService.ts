@@ -153,7 +153,7 @@ async function getMsal(config: SharePointConfig) {
     auth: {
       clientId: graph.clientId,
       authority: `https://login.microsoftonline.com/${graph.tenantId}`,
-      redirectUri: graph.redirectUri || window.location.origin,
+      redirectUri: graph.redirectUri || `${window.location.origin}/redirect.html`,
     },
     cache: { cacheLocation: 'sessionStorage' },
   });
