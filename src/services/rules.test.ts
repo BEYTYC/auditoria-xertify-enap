@@ -558,7 +558,8 @@ describe('mapeo a Tabla3', () => {
     expect(row.NOMBRES).toBe('Luis Gabriel');
     expect(row['TIPO DE DOC']).toBe('CC');
     expect(row['DOCUMENTO DE IDENTIDAD']).toBe(1026286605);
-    expect(row['LUGAR EXPEDICION']).toBe('BOGOTÁ D.C.');
+    // Capitalizado, tal como en la plantilla; sin forzar mayúscula sostenida.
+    expect(row['LUGAR EXPEDICION']).toBe('Bogotá D.C.');
     expect(row['NOMBRE DEL CURSO']).toBe('ENGLISH INTERMEDIATE - B1');
     expect(row.INTENSIDAD).toBe(120);
     expect(row['OFICINA RESPONSABLE']).toBe('DICSH - DIVISIÓN CIENCIAS SOCIALES');
@@ -614,7 +615,7 @@ describe('mapeo a Tabla3', () => {
       }),
     ];
     const [row] = buildDatabaseRows(conLugarexpi, metadata, allocation);
-    expect(row['LUGAR EXPEDICION']).toBe('CÚCUTA');
+    expect(row['LUGAR EXPEDICION']).toBe('Cúcuta');
   });
 
   it('omite DIRECTOR FIRMANTE cuando la tabla no la tiene', () => {

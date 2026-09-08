@@ -278,17 +278,34 @@ export function useAudit() {
       return null;
     }
 
-    setLoading('Registrando el lote…');
     setError(null);
+
+    // Antes de registrar se vuelve a consultar la Base de Datos: si alguien
+    // agregó una columna (p. ej. DIRECTOR FIRMANTE) o cambió algo mientras
+    // esta pantalla estaba abierta, no se registra con datos viejos.
+    setLoading('Consultando la Base de Datos…');
+    let info = tableInfo;
+    try {
+      info = await inspectDestination(config);
+      setTableInfo(info);
+      if (info.lastPosition) setLastPosition(info.lastPosition);
+      if (info.lastConsecutivo !== null) setLastConsecutivo(info.lastConsecutivo);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setLoading(null);
+      return null;
+    }
+
+    setLoading('Registrando el lote…');
 
     try {
       const outcome = await registerBatch({
         rows,
         metadata,
         config,
-        lastPosition,
-        lastConsecutivo,
-        optionalColumns: tableInfo?.availableOptionalColumns ?? [],
+        lastPosition: info?.lastPosition ?? lastPosition,
+        lastConsecutivo: info?.lastConsecutivo ?? lastConsecutivo,
+        optionalColumns: info?.availableOptionalColumns ?? [],
       });
       setResult(outcome);
       setLog(readLog());

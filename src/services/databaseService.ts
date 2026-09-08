@@ -9,7 +9,7 @@
  *   APELLIDOS        → APELLIDOS          (tal cual en la plantilla; ver toDatabasePersonName)
  *   NUMERODOCUMENTO  → DOCUMENTO DE IDENTIDAD
  *   docformato       → TIPO DE DOC        (abreviado: CC, TI, CE, PS)
- *   lugarexpi        → LUGAR EXPEDICION   (respaldo: lugarexpedicion)
+ *   lugarexpi        → LUGAR EXPEDICION   (respaldo: lugarexpedicion; tal cual en la plantilla)
  *   titulo           → NOMBRE DEL CURSO
  *   intensidad       → INTENSIDAD
  *   fechainicio      → FECHA INICIO
@@ -95,6 +95,15 @@ export function toDatabasePersonName(text: string): string {
 
 export function toDatabasePlace(text: string): string {
   return toDatabaseCase(restoreAccents(text, ACCENT_PLACES));
+}
+
+/**
+ * LUGAR EXPEDICION va a la base capitalizado, tal como queda corregido en la
+ * plantilla («Bogotá D.C.», «Cúcuta»), sin forzar mayúscula sostenida —igual
+ * criterio que NOMBRES y APELLIDOS.
+ */
+export function toDatabasePlaceName(text: string): string {
+  return restoreAccents(collapseSpaces(text), ACCENT_PLACES);
 }
 
 export function toDatabaseText(text: string): string {
@@ -188,7 +197,7 @@ export function buildDatabaseRows(
       NOMBRES: toDatabasePersonName(cell('nombres')),
       'TIPO DE DOC': tipoDeDocFor(cell('docformato'), cell('tipodocumento')),
       'DOCUMENTO DE IDENTIDAD': numero,
-      'LUGAR EXPEDICION': toDatabasePlace(cell('lugarexpi') || cell('lugarexpedicion')),
+      'LUGAR EXPEDICION': toDatabasePlaceName(cell('lugarexpi') || cell('lugarexpedicion')),
       'NOMBRE DEL CURSO': toDatabaseText(curso),
       'FECHA INICIO': rango ? toExcelSerial(rango.start) : dateCell(inicioTexto),
       // Solo se llena cuando `fechainicio` viene como rango; si trae una fecha
