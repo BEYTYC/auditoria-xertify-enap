@@ -210,6 +210,19 @@ export function SettingsDialog({
                   setDraft({ ...draft, graph: { ...draft.graph!, worksheetName } })
                 }
               />
+              <div className="sm:col-span-2">
+                <Text
+                  label="Correo remitente del aviso (opcional, p. ej. certificaciones@enap.edu.co)"
+                  value={draft.graph?.mailFrom ?? ''}
+                  onChange={(mailFrom) => setDraft({ ...draft, graph: { ...draft.graph!, mailFrom } })}
+                />
+                <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                  Si lo deja vacío, el correo sale de la cuenta con la que se inicia sesión para
+                  registrar. Para que salga de otra cuenta (p. ej. una cuenta compartida de
+                  Certificaciones), esa cuenta con la que se inicia sesión necesita permiso
+                  «Enviar como» sobre ese buzón, concedido desde Exchange por la Dirección de TIC.
+                </p>
+              </div>
             </div>
           )}
 

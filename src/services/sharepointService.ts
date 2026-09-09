@@ -18,6 +18,7 @@ import {
 } from '../config/appConfig';
 import {
   type DatabaseRow,
+  type EmailContext,
   type LedgerPosition,
   type SharePointConfig,
   type SharePointMode,
@@ -55,6 +56,11 @@ export interface AppendOutcome {
   message: string;
 }
 
+export interface NotifyOutcome {
+  sent: boolean;
+  message: string;
+}
+
 export interface SharePointAdapter {
   readonly mode: SharePointMode;
   /** Comprueba credenciales y lee la estructura de la tabla. */
@@ -67,6 +73,11 @@ export interface SharePointAdapter {
    * puede pedirla.
    */
   deleteByConsecutive(consecutivos: number[]): Promise<number>;
+  /**
+   * Avisa del registro ya hecho al responsable. Nunca lanza: un correo que no
+   * salió no debe hacer parecer que el registro en la Base de Datos falló.
+   */
+  notify(context: EmailContext): Promise<NotifyOutcome>;
 }
 
 export class SharePointError extends Error {
@@ -131,7 +142,7 @@ async function describeHttpError(response: Response): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
-const GRAPH_SCOPES = ['Files.ReadWrite.All', 'Sites.ReadWrite.All'];
+const GRAPH_SCOPES = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Mail.Send'];
 /** Tamaño de lote de inserción: Graph tolera mal payloads muy grandes. */
 const INSERT_CHUNK = 100;
 
@@ -179,6 +190,27 @@ async function acquireToken(config: SharePointConfig): Promise<string> {
 
   const popup = await instance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
   return popup.accessToken;
+}
+
+/** Cuerpo HTML del correo de confirmación del registro. */
+function receiptEmailHtml(context: EmailContext): string {
+  const escapado = (texto: string) =>
+    texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #0f2540; font-size: 14px; line-height: 1.5;">
+      <p>Estimado(a) <strong>${escapado(context.responsable)}</strong>,</p>
+      <p>
+        Se registró oficialmente el lote <strong>${escapado(context.idRegistro)}</strong>
+        correspondiente al curso <strong>${escapado(context.curso)}</strong> en la Base de
+        Datos de Cursos de Extensión de la Oficina de Estadística.
+      </p>
+      <p>Este correo es una confirmación automática; no requiere respuesta.</p>
+      <p style="margin-top: 24px; color: #56708f; font-size: 12px;">
+        Oficina de Estadística — Escuela Naval de Cadetes "Almirante Padilla"
+      </p>
+    </div>
+  `.trim();
 }
 
 export class GraphAdapter implements SharePointAdapter {
@@ -476,6 +508,72 @@ export class GraphAdapter implements SharePointAdapter {
       message: `${sent} filas anexadas a la tabla ${graph.tableId} en SharePoint.`,
     };
   }
+
+  /**
+   * Envía el correo de confirmación con la cuenta que inició sesión para
+   * registrar (permiso `Mail.Send`). Nunca lanza: si el correo falla, el
+   * registro en la Base de Datos ya quedó hecho y no debe verse como un
+   * error del registro.
+   *
+   * Si `graph.mailFrom` está configurado (p. ej. `certificaciones@enap.edu.co`),
+   * el correo se pide enviar desde esa cuenta en vez de la que inició sesión.
+   * Microsoft solo lo permite si esa cuenta le dio permiso «Enviar como»
+   * sobre ese buzón en Exchange; si no lo tiene, rechaza el envío y hay que
+   * pedirle a la Dirección de TIC que conceda ese permiso.
+   */
+  async notify(context: EmailContext): Promise<NotifyOutcome> {
+    if (!context.correoResponsable) {
+      return { sent: false, message: 'No se indicó un correo de destino.' };
+    }
+    const mailFrom = this.config.graph?.mailFrom?.trim();
+    try {
+      const headers = await this.headers();
+      const response = await fetchWithRetry(`${GRAPH_ROOT}/me/sendMail`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message: {
+            subject: `Registro Oficial ${context.idRegistro} — ${context.curso}`,
+            body: { contentType: 'HTML', content: receiptEmailHtml(context) },
+            toRecipients: [{ emailAddress: { address: context.correoResponsable } }],
+            ...(mailFrom ? { from: { emailAddress: { address: mailFrom } } } : {}),
+          },
+          saveToSentItems: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const detalleHttp = await describeHttpError(response);
+        const pistaPermiso =
+          mailFrom && response.status === 403
+            ? ` La cuenta con la que inició sesión necesita permiso «Enviar como» sobre ${mailFrom} en Exchange; pídaselo a la Dirección de TIC.`
+            : '';
+        throw new SharePointError(
+          `Microsoft rechazó el envío del correo.${pistaPermiso}`,
+          detalleHttp,
+          response.status,
+        );
+      }
+
+      return {
+        sent: true,
+        message: mailFrom
+          ? `Correo de confirmación enviado a ${context.correoResponsable} desde ${mailFrom}.`
+          : `Correo de confirmación enviado a ${context.correoResponsable}.`,
+      };
+    } catch (error) {
+      const detalle =
+        error instanceof SharePointError
+          ? [error.message, error.detail].filter(Boolean).join(' — ')
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      return {
+        sent: false,
+        message: `No se pudo enviar el correo de confirmación: ${detalle}`,
+      };
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -535,6 +633,46 @@ export class WebhookAdapter implements SharePointAdapter {
       rowsSent: rows.length,
       message: `${rows.length} filas enviadas al flujo de Power Automate.`,
     };
+  }
+
+  /**
+   * Le avisa al mismo flujo, con una llamada aparte y `accion: "notificar"`,
+   * para que sea el flujo el que envíe el correo (con un paso de «Enviar un
+   * correo electrónico (V2)» que use `correoResponsable`, `responsable`,
+   * `curso` e `idRegistro` del cuerpo recibido). Así nadie tiene que iniciar
+   * sesión en nada: el flujo ya corre con la cuenta de servicio configurada
+   * una sola vez al crearlo.
+   */
+  async notify(context: EmailContext): Promise<NotifyOutcome> {
+    const webhook = this.config.webhook!;
+    try {
+      const response = await fetchWithRetry(webhook.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(webhook.headers ?? {}) },
+        body: JSON.stringify({ accion: 'notificar', ...context }),
+      });
+
+      if (!response.ok) {
+        throw new SharePointError(
+          'El flujo de Power Automate rechazó el aviso de correo.',
+          await describeHttpError(response),
+          response.status,
+        );
+      }
+
+      return {
+        sent: true,
+        message: 'Se avisó al flujo de Power Automate para que envíe el correo de confirmación.',
+      };
+    } catch (error) {
+      const detalle =
+        error instanceof SharePointError
+          ? [error.message, error.detail].filter(Boolean).join(' — ')
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      return { sent: false, message: `No se pudo avisar al flujo para el correo: ${detalle}` };
+    }
   }
 }
 
@@ -610,6 +748,15 @@ export class MockAdapter implements SharePointAdapter {
       message:
         `${rows.length} filas guardadas en el registro local. ` +
         'Configure Microsoft Graph o Power Automate para escribir en SharePoint.',
+    };
+  }
+
+  async notify(): Promise<NotifyOutcome> {
+    return {
+      sent: false,
+      message:
+        'El registro local no envía correos reales. Configure Microsoft Graph o Power Automate ' +
+        'para el envío automático del correo de confirmación.',
     };
   }
 }

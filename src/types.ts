@@ -252,7 +252,6 @@ export const DB_COLUMNS = [
   'AÑO',
   'INTENSIDAD',
   'OFICINA RESPONSABLE',
-  'OBSEVACIONES',
   'FIRMANTE 1',
   'FIRMANTE 2',
   'FIRMANTE 3',
@@ -263,11 +262,16 @@ export type DbColumn = (typeof DB_COLUMNS)[number];
 /**
  * Esta lista es la única fuente de verdad de lo que se escribe en Tabla3: el
  * orden importa (Microsoft Graph inserta por posición, no por nombre) y debe
- * coincidir exactamente con las columnas reales de la tabla en SharePoint.
+ * coincidir EXACTAMENTE con las columnas reales de la tabla en SharePoint —
+ * ni una de más ni una de menos, en el mismo orden.
  *
- * `FIRMANTE 1/2/3` van al final porque así se agregan las columnas nuevas en
- * una tabla de Excel. Salen de `nomfirma1/2/3` de la plantilla; cuando el
- * certificado no trae un tercer firmante, `FIRMANTE 3` queda vacío.
+ * `Tabla3` no tiene columna `OBSEVACIONES`: se quitó de esta lista porque la
+ * tabla real no la tiene (confirmado por Graph al rechazar la inserción por
+ * descuadre de columnas).
+ *
+ * `FIRMANTE 1/2/3` van al final porque así se agregaron en la tabla de Excel.
+ * Salen de `nomfirma1/2/3` de la plantilla; cuando el certificado no trae un
+ * tercer firmante, `FIRMANTE 3` queda vacío.
  */
 
 /** Una fila lista para insertarse en Tabla3. */
@@ -317,6 +321,17 @@ export interface GraphConfig {
   /** Hoja de respaldo: `Libro No. 2`. */
   worksheetName?: string;
   redirectUri?: string;
+  /**
+   * Cuenta desde la que debe verse enviado el correo de confirmación, p. ej.
+   * `certificaciones@enap.edu.co`. Si se deja vacío, el correo sale de la
+   * cuenta con la que se inició sesión para registrar.
+   *
+   * Para que funcione, quien inicia sesión (hoy, la cuenta administradora)
+   * necesita permiso «Enviar como» sobre este buzón en Exchange; si no lo
+   * tiene, Microsoft rechaza el envío y hay que pedirle a la Dirección de
+   * TIC que lo conceda.
+   */
+  mailFrom?: string;
 }
 
 export interface WebhookConfig {
@@ -332,6 +347,14 @@ export interface SharePointConfig {
 
 export type RegistrationOutcome = 'success' | 'error';
 
+/** Datos que necesita el correo de confirmación del registro. */
+export interface EmailContext {
+  responsable: string;
+  correoResponsable: string;
+  curso: string;
+  idRegistro: string;
+}
+
 export interface RegistrationResult {
   outcome: RegistrationOutcome;
   mode: SharePointMode;
@@ -342,6 +365,13 @@ export interface RegistrationResult {
   workbookUrl?: string;
   errorDetail?: string;
   completedAt: string;
+  /**
+   * Resultado del correo de confirmación. Solo se intenta cuando el registro
+   * en la Base de Datos quedó en firme: no tiene sentido avisar de un lote
+   * que no se asentó.
+   */
+  emailSent: boolean;
+  emailMessage: string;
 }
 
 export interface LogEntry {

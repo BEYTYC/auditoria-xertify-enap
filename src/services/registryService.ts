@@ -292,6 +292,15 @@ export async function registerBatch(
       syncedToSharePoint: adapter.mode !== 'mock',
     });
 
+    // El correo se intenta solo después de que el registro quedó en firme:
+    // si falla, no debe verse como si el registro tampoco hubiera quedado.
+    const notification = await adapter.notify({
+      responsable: request.metadata.responsable,
+      correoResponsable: request.metadata.correoResponsable,
+      curso: receipt.curso,
+      idRegistro: receipt.idRegistro,
+    });
+
     return {
       outcome: 'success',
       mode: adapter.mode,
@@ -300,6 +309,8 @@ export async function registerBatch(
       message: outcome.message,
       workbookUrl: outcome.workbookUrl,
       completedAt: new Date().toISOString(),
+      emailSent: notification.sent,
+      emailMessage: notification.message,
     };
   } catch (error) {
     const detail =
@@ -321,6 +332,8 @@ export async function registerBatch(
         'vuelva a intentarlo; no se guardó ningún respaldo local.',
       errorDetail: detail,
       completedAt: new Date().toISOString(),
+      emailSent: false,
+      emailMessage: 'No se envió correo: el lote no quedó registrado.',
     };
   }
 }

@@ -204,13 +204,11 @@ function Confirmation({
 
 function Receipt({
   result,
-  metadata,
   onDownloadCorrected,
   onReset,
 }: RegisterStepProps & { result: RegistrationResult }) {
   const ok = result.outcome === 'success';
   const { receipt } = result;
-  const correo = metadata.correoResponsable.trim();
 
   return (
     <motion.div
@@ -283,10 +281,18 @@ function Receipt({
                 </details>
               )}
 
-              {ok && correo && (
-                <p className="mt-3 flex items-center gap-1.5 text-[12px] text-slate-600">
-                  <Mail size={13} className="shrink-0 text-sky-700" />
-                  Se envió el registro a <strong className="text-navy-900">{correo}</strong>.
+              {ok && (
+                <p
+                  className={[
+                    'mt-3 flex items-center gap-1.5 text-[12px]',
+                    result.emailSent ? 'text-slate-600' : 'text-amber-800',
+                  ].join(' ')}
+                >
+                  <Mail
+                    size={13}
+                    className={['shrink-0', result.emailSent ? 'text-sky-700' : 'text-amber-600'].join(' ')}
+                  />
+                  {result.emailMessage}
                 </p>
               )}
 

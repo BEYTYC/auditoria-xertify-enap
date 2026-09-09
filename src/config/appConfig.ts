@@ -30,6 +30,7 @@ export function defaultConfig(): SharePointConfig {
       filePath: read('VITE_GRAPH_FILE_PATH'),
       tableId: read('VITE_GRAPH_TABLE_ID', 'Tabla3'),
       worksheetName: read('VITE_GRAPH_WORKSHEET', 'Libro No. 2'),
+      mailFrom: read('VITE_GRAPH_MAIL_FROM'),
       // Apunta al puente de MSAL (`redirect.html`), no al `index.html`
       // normal: si el login vuelve directo a la app completa, Microsoft
       // nunca deja que esa ventana se cierre sola (ver sharepointService.ts).

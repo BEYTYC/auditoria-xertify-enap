@@ -27,7 +27,6 @@
  *   OFICINA RESPONSABLE  confirmada por el responsable (ver officeService)
  *
  * `FECHA FINALIZACION` no tiene origen en la plantilla: se deja vacía.
- * `OBSEVACIONES` tampoco tiene origen en la plantilla: se deja vacía.
  */
 
 import {
@@ -200,7 +199,6 @@ export function buildDatabaseRows(
       AÑO: parseAnyDate(fechaRegistro)?.year ?? null,
       INTENSIDAD: Number.isFinite(intensidad) ? intensidad : null,
       'OFICINA RESPONSABLE': metadata.oficina,
-      OBSEVACIONES: null,
       // Tal cual en la plantilla, sin forzar mayúscula: si el certificado no
       // trae un tercer firmante, FIRMANTE 3 queda vacío.
       'FIRMANTE 1': collapseSpaces(cell('nomfirma1')) || null,

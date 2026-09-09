@@ -563,7 +563,7 @@ describe('mapeo a Tabla3', () => {
     expect(row['NOMBRE DEL CURSO']).toBe('ENGLISH INTERMEDIATE - B1');
     expect(row.INTENSIDAD).toBe(120);
     expect(row['OFICINA RESPONSABLE']).toBe('DICSH - DIVISIÓN CIENCIAS SOCIALES');
-    expect(row.OBSEVACIONES).toBeNull();
+    expect(row).not.toHaveProperty('OBSEVACIONES');
     // Los firmantes van tal cual llegan de la plantilla.
     expect(row['FIRMANTE 1']).toBe('Capitán de Navío');
     expect(row['FIRMANTE 2']).toBeNull();
