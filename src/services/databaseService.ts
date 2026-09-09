@@ -14,8 +14,11 @@
  *   intensidad       → INTENSIDAD
  *   fechainicio      → FECHA INICIO
  *   fechaemite       → FECHA DE REGISTRO
- *   nomfirma3        → DIRECTOR FIRMANTE  (columna opcional, ver más abajo)
  *   li / fo / numre  → LIBRO / FOLIO / REG
+ *   nomfirma1        → FIRMANTE 1        (tal cual en la plantilla)
+ *   nomfirma2        → FIRMANTE 2        (tal cual en la plantilla)
+ *   nomfirma3        → FIRMANTE 3        (tal cual en la plantilla; vacío si el
+ *                                          certificado no trae un tercer firmante)
  *
  * Columnas que la app calcula por su cuenta:
  *   N        consecutivo global
@@ -23,22 +26,14 @@
  *   AÑO      año de FECHA DE REGISTRO
  *   OFICINA RESPONSABLE  confirmada por el responsable (ver officeService)
  *
- * De los tres firmantes (`nomfirma1`, `nomfirma2`, `nomfirma3`) solo el
- * tercero se copia a la base, como `DIRECTOR FIRMANTE`: los otros dos no
- * tienen columna propia y no se escriben en ningún lado.
- *
  * `FECHA FINALIZACION` no tiene origen en la plantilla: se deja vacía.
  * `OBSEVACIONES` tampoco tiene origen en la plantilla: se deja vacía.
- * `DIRECTOR FIRMANTE` solo se escribe si la tabla destino la ofrece (se
- * detecta al consultar), para no romper la inserción si algún día falta.
  */
 
 import {
   DB_COLUMNS,
-  DB_OPTIONAL_COLUMNS,
   type BatchMetadata,
   type DbColumn,
-  type DbOptionalColumn,
   type DatabaseRow,
   type LedgerAllocation,
   type StudentRow,
@@ -147,8 +142,6 @@ export function tipoDeDocFor(docformato: string, tipodocumento: string): string 
 export interface DatabaseBuildOptions {
   /** `true` para enviar la fórmula de PERIODO; `false` para el texto calculado. */
   usePeriodoFormula?: boolean;
-  /** Columnas opcionales que la tabla destino sí tiene (p.ej. DIRECTOR FIRMANTE). */
-  availableOptionalColumns?: string[];
 }
 
 /**
@@ -162,7 +155,6 @@ export function buildDatabaseRows(
   options: DatabaseBuildOptions = {},
 ): DatabaseRow[] {
   const usePeriodoFormula = options.usePeriodoFormula ?? true;
-  const optional = new Set(options.availableOptionalColumns ?? []);
 
   return rows.map((row, index) => {
     const position = allocation.positions[index];
@@ -208,35 +200,26 @@ export function buildDatabaseRows(
       AÑO: parseAnyDate(fechaRegistro)?.year ?? null,
       INTENSIDAD: Number.isFinite(intensidad) ? intensidad : null,
       'OFICINA RESPONSABLE': metadata.oficina,
-      // De los tres firmantes solo el tercero (nomfirma3) va a la base, como
-      // DIRECTOR FIRMANTE más abajo: nomfirma1 y nomfirma2 no tienen columna.
       OBSEVACIONES: null,
+      // Tal cual en la plantilla, sin forzar mayúscula: si el certificado no
+      // trae un tercer firmante, FIRMANTE 3 queda vacío.
+      'FIRMANTE 1': collapseSpaces(cell('nomfirma1')) || null,
+      'FIRMANTE 2': collapseSpaces(cell('nomfirma2')) || null,
+      'FIRMANTE 3': collapseSpaces(cell('nomfirma3')) || null,
     };
-
-    if (optional.has('DIRECTOR FIRMANTE')) {
-      built['DIRECTOR FIRMANTE'] = collapseSpaces(cell('nomfirma3')) || null;
-    }
 
     return built;
   });
 }
 
 /** Columnas efectivas de la inserción, en orden. */
-export function effectiveColumns(
-  availableOptionalColumns: string[] = [],
-): (DbColumn | DbOptionalColumn)[] {
-  const optional = DB_OPTIONAL_COLUMNS.filter((column) =>
-    availableOptionalColumns.includes(column),
-  );
-  return [...DB_COLUMNS, ...optional];
+export function effectiveColumns(): DbColumn[] {
+  return [...DB_COLUMNS];
 }
 
 /** Convierte las filas al arreglo bidimensional que espera Microsoft Graph. */
-export function toGraphMatrix(
-  rows: DatabaseRow[],
-  availableOptionalColumns: string[] = [],
-): (string | number | null)[][] {
-  const columns = effectiveColumns(availableOptionalColumns);
+export function toGraphMatrix(rows: DatabaseRow[]): (string | number | null)[][] {
+  const columns = effectiveColumns();
   return rows.map((row) => columns.map((column) => row[column] ?? null));
 }
 
@@ -263,8 +246,8 @@ export function serialToDisplay(serial: number): string {
  * el CSV lo abre una persona y pega el contenido en la Base de Datos, donde
  * un serial suelto («46034») no se entiende.
  */
-export function toCsv(rows: DatabaseRow[], availableOptionalColumns: string[] = []): string {
-  const columns = effectiveColumns(availableOptionalColumns);
+export function toCsv(rows: DatabaseRow[]): string {
+  const columns = effectiveColumns();
   const escape = (value: string | number | null | undefined): string => {
     if (value === null || value === undefined) return '';
     const text = String(value);

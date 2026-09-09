@@ -563,10 +563,35 @@ describe('mapeo a Tabla3', () => {
     expect(row['NOMBRE DEL CURSO']).toBe('ENGLISH INTERMEDIATE - B1');
     expect(row.INTENSIDAD).toBe(120);
     expect(row['OFICINA RESPONSABLE']).toBe('DICSH - DIVISIÓN CIENCIAS SOCIALES');
-    // De los tres firmantes solo nomfirma3 se copia a la base (DIRECTOR
-    // FIRMANTE, más abajo): nomfirma1 no tiene columna propia.
     expect(row.OBSEVACIONES).toBeNull();
+    // Los firmantes van tal cual llegan de la plantilla.
+    expect(row['FIRMANTE 1']).toBe('Capitán de Navío');
+    expect(row['FIRMANTE 2']).toBeNull();
+    expect(row['FIRMANTE 3']).toBe('Director de la Escuela');
     expect(row.AÑO).toBe(2026);
+  });
+
+  it('FIRMANTE 3 queda vacío cuando el certificado no trae un tercer firmante', () => {
+    const sinTercero = [
+      makeRow({
+        nombres: 'Luis Gabriel',
+        apellidos: 'Alarcón Torres',
+        tipodocumento: 'Colombia - Cédula de ciudadanía',
+        docformato: 'cédula de ciudadanía',
+        numerodocumento: '1026286605',
+        lugarexpedicion: 'Bogotá D.C.',
+        titulo: 'English Intermediate - B1',
+        intensidad: '120',
+        fechainicio: '12 de enero de 2026',
+        fechaemite: '14 de julio de 2026',
+        nomfirma1: 'Capitán de Navío',
+        nomfirma2: 'Vicealmirante',
+      }),
+    ];
+    const [row] = buildDatabaseRows(sinTercero, metadata, allocation);
+    expect(row['FIRMANTE 1']).toBe('Capitán de Navío');
+    expect(row['FIRMANTE 2']).toBe('Vicealmirante');
+    expect(row['FIRMANTE 3']).toBeNull();
   });
 
   it('APELLIDOS/NOMBRES: si empiezan con un conector, esa letra va en mayúscula', () => {
@@ -616,16 +641,6 @@ describe('mapeo a Tabla3', () => {
     ];
     const [row] = buildDatabaseRows(conLugarexpi, metadata, allocation);
     expect(row['LUGAR EXPEDICION']).toBe('Cúcuta');
-  });
-
-  it('omite DIRECTOR FIRMANTE cuando la tabla no la tiene', () => {
-    const [sin] = buildDatabaseRows(rows, metadata, allocation);
-    expect(sin['DIRECTOR FIRMANTE']).toBeUndefined();
-
-    const [con] = buildDatabaseRows(rows, metadata, allocation, {
-      availableOptionalColumns: ['DIRECTOR FIRMANTE'],
-    });
-    expect(con['DIRECTOR FIRMANTE']).toBe('Director de la Escuela');
   });
 
   it('conserva tildes al pasar a mayúscula', () => {

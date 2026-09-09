@@ -135,8 +135,6 @@ export interface RegistrationRequest {
   lastPosition: LedgerPosition;
   /** Último consecutivo `N` de Tabla3. */
   lastConsecutivo: number;
-  /** Columnas opcionales que la tabla destino admite. */
-  optionalColumns?: string[];
 }
 
 export interface RegistrationPreview {
@@ -167,7 +165,7 @@ export function previewRegistration(
   request: RegistrationRequest,
   now = new Date(),
 ): RegistrationPreview {
-  const { rows, metadata, lastPosition, lastConsecutivo, optionalColumns = [] } = request;
+  const { rows, metadata, lastPosition, lastConsecutivo } = request;
 
   const allocation = allocate(lastPosition, lastConsecutivo, rows.length);
   const stats = buildStats(rows);
@@ -190,9 +188,7 @@ export function previewRegistration(
     referenciaAuditoria: `${idRegistro} · ${describeAllocation(allocation)}`,
   };
 
-  const databaseRows = buildDatabaseRows(rows, metadata, allocation, {
-    availableOptionalColumns: optionalColumns,
-  });
+  const databaseRows = buildDatabaseRows(rows, metadata, allocation);
 
   return { receipt, databaseRows, resumenNumeracion: describeAllocation(allocation) };
 }
@@ -287,7 +283,7 @@ export async function registerBatch(
   };
 
   try {
-    const outcome = await adapter.append(databaseRows, request.optionalColumns ?? []);
+    const outcome = await adapter.append(databaseRows);
 
     appendLog({
       ...baseLog,

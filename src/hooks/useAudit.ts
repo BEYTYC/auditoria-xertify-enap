@@ -246,9 +246,8 @@ export function useAudit() {
       config,
       lastPosition,
       lastConsecutivo,
-      optionalColumns: tableInfo?.availableOptionalColumns ?? [],
     });
-  }, [rows, metadata, config, lastPosition, lastConsecutivo, tableInfo]);
+  }, [rows, metadata, config, lastPosition, lastConsecutivo]);
 
   /**
    * Un lote que ya se asentó no se vuelve a asentar: quedaría dos veces en el
@@ -261,10 +260,6 @@ export function useAudit() {
   }, [rows, metadata.curso, log, tableInfo, result]);
 
   const register = useCallback(async () => {
-    if (duplicado) {
-      setError(duplicateMessage(duplicado));
-      return null;
-    }
     if (!clean) {
       setError('El lote todavía tiene errores. Corríjalos antes de registrar.');
       return null;
@@ -282,7 +277,9 @@ export function useAudit() {
 
     // Antes de registrar se vuelve a consultar la Base de Datos: si alguien
     // agregó una columna (p. ej. DIRECTOR FIRMANTE) o cambió algo mientras
-    // esta pantalla estaba abierta, no se registra con datos viejos.
+    // esta pantalla estaba abierta, no se registra con datos viejos. Esto
+    // también refresca las últimas claves de la tabla, así que el chequeo de
+    // duplicados de abajo no se queda con información vieja o vacía.
     setLoading('Consultando la Base de Datos…');
     let info = tableInfo;
     try {
@@ -296,6 +293,16 @@ export function useAudit() {
       return null;
     }
 
+    // Se revisa contra las claves recién leídas, no contra el `duplicado`
+    // calculado antes de esta consulta: si el registro se dispara solo al
+    // entrar al paso, ese valor puede estar vacío o desactualizado.
+    const duplicadoFresco = findDuplicateBatch(rows, metadata.curso, log, info.recentKeys ?? []);
+    if (duplicadoFresco) {
+      setError(duplicateMessage(duplicadoFresco));
+      setLoading(null);
+      return null;
+    }
+
     setLoading('Registrando el lote…');
 
     try {
@@ -305,7 +312,6 @@ export function useAudit() {
         config,
         lastPosition: info?.lastPosition ?? lastPosition,
         lastConsecutivo: info?.lastConsecutivo ?? lastConsecutivo,
-        optionalColumns: info?.availableOptionalColumns ?? [],
       });
       setResult(outcome);
       setLog(readLog());
@@ -351,7 +357,7 @@ export function useAudit() {
     } finally {
       setLoading(null);
     }
-  }, [duplicado, clean, rows, metadata, config, lastPosition, lastConsecutivo, tableInfo, parsed]);
+  }, [clean, rows, metadata, config, lastPosition, lastConsecutivo, tableInfo, log, parsed]);
 
   /* -------------------------------------------------------------- */
   /* Administración                                                  */

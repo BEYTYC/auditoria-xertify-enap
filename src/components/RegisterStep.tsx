@@ -74,7 +74,6 @@ export function RegisterStep(props: RegisterStepProps) {
 function Confirmation({
   preview,
   metadata,
-  tableInfo,
   loading,
   error,
   clean,
@@ -90,17 +89,22 @@ function Confirmation({
     EMAIL_PATTERN.test(metadata.correoResponsable.trim()) &&
     !duplicado;
   const { receipt } = preview;
-  const missingOptional =
-    tableInfo && !tableInfo.availableOptionalColumns.includes('DIRECTOR FIRMANTE');
 
-  // Al entrar al paso se relee la última posición asentada, para que la
-  // numeración salga del libro y no de lo que quedó guardado de otra sesión.
-  const yaConsultado = useRef(false);
+  // Al entrar a este paso ya no hace falta un clic aparte: se dispara el
+  // registro de una vez (que primero vuelve a consultar la Base de Datos y
+  // luego asienta el lote). Si algo no está completo (o ya se detectó como
+  // duplicado antes de llegar aquí), en cambio solo se consulta para mostrar
+  // el resumen, y queda el botón para reintentar a mano.
+  const yaDisparado = useRef(false);
   useEffect(() => {
-    if (yaConsultado.current) return;
-    yaConsultado.current = true;
-    onInspect();
-  }, [onInspect]);
+    if (yaDisparado.current) return;
+    yaDisparado.current = true;
+    if (listo) {
+      onRegister();
+    } else {
+      onInspect();
+    }
+  }, [listo, onInspect, onRegister]);
 
   return (
     <div className="mx-auto w-full max-w-[1120px] space-y-5">
@@ -132,14 +136,6 @@ function Confirmation({
           />
         </dl>
       </section>
-
-      {missingOptional && (
-        <Notice tone="warning">
-          La tabla de destino no tiene la columna <strong>DIRECTOR FIRMANTE</strong>, así que{' '}
-          <code>nomfirma3</code> no se escribirá. Créela en la Base de Datos y vuelva a consultar
-          para activarla.
-        </Notice>
-      )}
 
       {duplicado && (
         <section className="rounded-xl border-2 border-rose-300 bg-rose-50 px-5 py-4">

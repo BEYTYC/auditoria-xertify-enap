@@ -17,7 +17,6 @@ import {
   isWebhookReady,
 } from '../config/appConfig';
 import {
-  DB_OPTIONAL_COLUMNS,
   type DatabaseRow,
   type LedgerPosition,
   type SharePointConfig,
@@ -36,8 +35,6 @@ const RECENT_ROWS = 600;
 export interface TableInfo {
   /** Nombres de columna que la tabla destino realmente tiene. */
   columns: string[];
-  /** Columnas opcionales disponibles (p.ej. `DIRECTOR FIRMANTE`). */
-  availableOptionalColumns: string[];
   /** Última posición del libro, si se pudo leer. */
   lastPosition: LedgerPosition | null;
   /** Último consecutivo `N`, si se pudo leer. */
@@ -63,7 +60,7 @@ export interface SharePointAdapter {
   /** Comprueba credenciales y lee la estructura de la tabla. */
   inspect(): Promise<TableInfo>;
   /** Anexa las filas al final de la tabla. */
-  append(rows: DatabaseRow[], optionalColumns: string[]): Promise<AppendOutcome>;
+  append(rows: DatabaseRow[]): Promise<AppendOutcome>;
   /**
    * Quita del libro las filas cuyo consecutivo `N` se indique. Es la única
    * forma de deshacer un registro equivocado, y solo la Oficina de Estadística
@@ -310,15 +307,6 @@ export class GraphAdapter implements SharePointAdapter {
     const columnsBody = (await columnsResponse.json()) as { value: { name: string }[] };
     const columns = columnsBody.value.map((column) => column.name);
 
-    // Comparación sin distinguir mayúsculas ni espacios sobrantes: la columna
-    // se crea a mano en SharePoint y una diferencia de mayúscula («Director
-    // Firmante» en vez de «DIRECTOR FIRMANTE») no debe hacerla pasar por
-    // inexistente y descuadrar el número de columnas que se envían.
-    const columnsNorm = columns.map((name) => name.trim().toLocaleUpperCase('es-CO'));
-    const availableOptionalColumns = DB_OPTIONAL_COLUMNS.filter((column) =>
-      columnsNorm.includes(column.trim().toLocaleUpperCase('es-CO')),
-    );
-
     // 2. Última posición del libro: se leen las últimas filas de la tabla.
     let lastPosition: LedgerPosition | null = null;
     let lastConsecutivo: number | null = null;
@@ -370,7 +358,7 @@ export class GraphAdapter implements SharePointAdapter {
       // La numeración se resuelve con el valor configurado manualmente.
     }
 
-    return { columns, availableOptionalColumns, lastPosition, lastConsecutivo, recentKeys };
+    return { columns, lastPosition, lastConsecutivo, recentKeys };
   }
 
   /**
@@ -446,11 +434,11 @@ export class GraphAdapter implements SharePointAdapter {
     return borradas;
   }
 
-  async append(rows: DatabaseRow[], optionalColumns: string[]): Promise<AppendOutcome> {
+  async append(rows: DatabaseRow[]): Promise<AppendOutcome> {
     const graph = this.config.graph!;
     const headers = await this.headers();
     const base = await this.resolveBase();
-    const matrix = toGraphMatrix(rows, optionalColumns);
+    const matrix = toGraphMatrix(rows);
 
     let sent = 0;
     for (let start = 0; start < matrix.length; start += INSERT_CHUNK) {
@@ -506,7 +494,6 @@ export class WebhookAdapter implements SharePointAdapter {
     // El flujo no expone la estructura: se asume la tabla estándar.
     return {
       columns: effectiveColumns(),
-      availableOptionalColumns: [],
       lastPosition: null,
       lastConsecutivo: null,
       recentKeys: [],
@@ -520,9 +507,9 @@ export class WebhookAdapter implements SharePointAdapter {
     );
   }
 
-  async append(rows: DatabaseRow[], optionalColumns: string[]): Promise<AppendOutcome> {
+  async append(rows: DatabaseRow[]): Promise<AppendOutcome> {
     const webhook = this.config.webhook!;
-    const columns = effectiveColumns(optionalColumns);
+    const columns = effectiveColumns();
 
     const response = await fetchWithRetry(webhook.url, {
       method: 'POST',
@@ -532,7 +519,7 @@ export class WebhookAdapter implements SharePointAdapter {
         hoja: 'Libro No. 2',
         columnas: columns,
         filas: rows,
-        valores: toGraphMatrix(rows, optionalColumns),
+        valores: toGraphMatrix(rows),
       }),
     });
 
@@ -583,9 +570,7 @@ export class MockAdapter implements SharePointAdapter {
     const last = stored[stored.length - 1];
 
     return {
-      columns: effectiveColumns([...DB_OPTIONAL_COLUMNS]),
-      // En modo local se admite la columna opcional, para probar el mapeo.
-      availableOptionalColumns: [...DB_OPTIONAL_COLUMNS],
+      columns: effectiveColumns(),
       lastPosition: last
         ? { libro: Number(last.LIBRO), folio: Number(last.FOLIO), registro: Number(last.REG) }
         : null,
@@ -606,9 +591,7 @@ export class MockAdapter implements SharePointAdapter {
     return stored.length - quedan.length;
   }
 
-  // El segundo parámetro existe para cumplir el contrato; el mock guarda todo.
-  async append(rows: DatabaseRow[], _optionalColumns: string[] = []): Promise<AppendOutcome> {
-    void _optionalColumns;
+  async append(rows: DatabaseRow[]): Promise<AppendOutcome> {
     const stored = readMockRows();
     const next = [...stored, ...rows];
     try {

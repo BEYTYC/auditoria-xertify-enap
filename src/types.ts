@@ -253,21 +253,25 @@ export const DB_COLUMNS = [
   'INTENSIDAD',
   'OFICINA RESPONSABLE',
   'OBSEVACIONES',
+  'FIRMANTE 1',
+  'FIRMANTE 2',
+  'FIRMANTE 3',
 ] as const;
 
 export type DbColumn = (typeof DB_COLUMNS)[number];
 
 /**
- * Columnas que la institución quiere alimentar y que ya existen en Tabla3.
- * Solo se escriben si la tabla destino las ofrece (se detecta al consultar).
+ * Esta lista es la única fuente de verdad de lo que se escribe en Tabla3: el
+ * orden importa (Microsoft Graph inserta por posición, no por nombre) y debe
+ * coincidir exactamente con las columnas reales de la tabla en SharePoint.
+ *
+ * `FIRMANTE 1/2/3` van al final porque así se agregan las columnas nuevas en
+ * una tabla de Excel. Salen de `nomfirma1/2/3` de la plantilla; cuando el
+ * certificado no trae un tercer firmante, `FIRMANTE 3` queda vacío.
  */
-export const DB_OPTIONAL_COLUMNS = ['DIRECTOR FIRMANTE'] as const;
-
-export type DbOptionalColumn = (typeof DB_OPTIONAL_COLUMNS)[number];
 
 /** Una fila lista para insertarse en Tabla3. */
-export type DatabaseRow = Record<DbColumn, string | number | null> &
-  Partial<Record<DbOptionalColumn, string | number | null>>;
+export type DatabaseRow = Record<DbColumn, string | number | null>;
 
 /* ------------------------------------------------------------------ */
 /* Comprobante del lote                                                 */
