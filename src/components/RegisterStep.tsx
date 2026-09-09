@@ -210,6 +210,15 @@ function Receipt({
   const ok = result.outcome === 'success';
   const { receipt } = result;
 
+  // Apenas se ve el comprobante de un registro exitoso, se descarga la
+  // plantilla corregida de una vez: no hace falta darle clic al botón aparte.
+  const yaDescargado = useRef(false);
+  useEffect(() => {
+    if (!ok || yaDescargado.current) return;
+    yaDescargado.current = true;
+    onDownloadCorrected(receipt.idRegistro);
+  }, [ok, receipt.idRegistro, onDownloadCorrected]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -221,7 +230,7 @@ function Receipt({
       <div className="card overflow-hidden">
         {/* El verde o el rojo claro quedan fijos: es la confirmación de que el
             registro quedó (o no quedó) en pie, y no debe desaparecer solo. */}
-        <div className={['relative overflow-hidden', ok ? 'bg-emerald-50' : 'bg-rose-50'].join(' ')}>
+        <div className={['relative overflow-hidden', ok ? 'bg-[#f3fbf6]' : 'bg-rose-50'].join(' ')}>
           <SelloDeAgua opacity={0.05} height={640} />
 
           <div className="relative">
@@ -303,7 +312,7 @@ function Receipt({
                   onClick={() => onDownloadCorrected(receipt.idRegistro)}
                 >
                   <FileSpreadsheet size={15} />
-                  Descargar archivo corregido
+                  Descargar Plantilla Xertify con registro
                 </button>
                 <a
                   href={XERTIFY_GENERATOR_URL}
