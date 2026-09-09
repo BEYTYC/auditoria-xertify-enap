@@ -17,6 +17,7 @@ interface LoginScreenProps {
   stage: 'email' | 'code';
   pendingEmail: string | null;
   demoCode: string | null;
+  sendingCode?: boolean;
   error: string | null;
   onRequestCode: (email: string) => void;
   onVerifyCode: (code: string) => void;
@@ -28,6 +29,7 @@ export function LoginScreen({
   stage,
   pendingEmail,
   demoCode,
+  sendingCode,
   error,
   onRequestCode,
   onVerifyCode,
@@ -106,13 +108,17 @@ export function LoginScreen({
                 className="flex flex-col gap-4"
               >
                 <p className="text-sm text-slate-600">
-                  Se generó un código de acceso para <strong className="text-navy-900">{pendingEmail}</strong>.
+                  {sendingCode ? (
+                    <>Enviando el código de acceso a <strong className="text-navy-900">{pendingEmail}</strong>…</>
+                  ) : (
+                    <>Se envió un código de acceso a <strong className="text-navy-900">{pendingEmail}</strong>. Revise su bandeja de entrada.</>
+                  )}
                 </p>
 
                 {demoCode && (
                   <div className="rounded-lg border border-gold-500/60 bg-gold-50 px-3 py-2.5 text-sm text-navy-900">
                     <p className="font-semibold uppercase tracking-wide text-[10px] text-gold-700">
-                      Modo de prueba — aún no hay correo conectado
+                      No se pudo enviar el correo — código de respaldo
                     </p>
                     <p className="mt-1">
                       Su código es <span className="font-mono text-base font-bold">{demoCode}</span>

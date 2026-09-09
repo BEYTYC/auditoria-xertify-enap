@@ -25,6 +25,9 @@ interface SettingsDialogProps {
   adminMensaje: string | null;
   onAbrirAdmin: (cuenta: string, clave: string) => boolean;
   onCerrarAdmin: () => void;
+  /** Correos que pueden llegar hasta el registro real. Vacío = sin restricción. */
+  authorizedEmails: string[];
+  onSaveAuthorizedEmails: (emails: string[]) => void;
 }
 
 const MODES: { key: SharePointMode; title: string; body: string }[] = [
@@ -57,10 +60,14 @@ export function SettingsDialog({
   adminMensaje,
   onAbrirAdmin,
   onCerrarAdmin,
+  authorizedEmails,
+  onSaveAuthorizedEmails,
 }: SettingsDialogProps) {
   const [draft, setDraft] = useState<SharePointConfig>(config);
+  const [emailsDraft, setEmailsDraft] = useState<string>(authorizedEmails.join('\n'));
 
   useEffect(() => setDraft(config), [config, open]);
+  useEffect(() => setEmailsDraft(authorizedEmails.join('\n')), [authorizedEmails, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -130,6 +137,22 @@ export function SettingsDialog({
         </header>
 
         <div className="space-y-5 px-5 py-5">
+          <fieldset>
+            <legend className="label">Correos autorizados para registrar</legend>
+            <p className="mb-2 text-[11px] leading-snug text-slate-600">
+              Quien no esté en esta lista puede cargar y auditar plantillas sin problema, pero al
+              llegar al paso de registro se le pedirá un correo institucional de esta lista y un
+              código de un solo uso antes de dejarlo escribir en el libro. Un correo por línea.
+              Déjelo vacío para no restringir (cualquier correo @enap.edu.co podrá registrar).
+            </p>
+            <textarea
+              className="field h-24 font-mono text-xs"
+              placeholder={'jefe.programa1@enap.edu.co\njefe.programa2@enap.edu.co'}
+              value={emailsDraft}
+              onChange={(event) => setEmailsDraft(event.target.value)}
+            />
+          </fieldset>
+
           <fieldset>
             <legend className="label">Método de escritura</legend>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -274,6 +297,12 @@ export function SettingsDialog({
             className="btn-primary"
             onClick={() => {
               onSave(draft);
+              onSaveAuthorizedEmails(
+                emailsDraft
+                  .split(/[\n,;]+/)
+                  .map((email) => email.trim().toLowerCase())
+                  .filter(Boolean),
+              );
               onClose();
             }}
           >

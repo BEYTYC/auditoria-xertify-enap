@@ -138,6 +138,47 @@ export function isWebhookReady(config: SharePointConfig): boolean {
   return Boolean(config.webhook?.url);
 }
 
+/* ------------------------------------------------------------------ */
+/* Correos autorizados para registrar                                   */
+/* ------------------------------------------------------------------ */
+
+const AUTHORIZED_REGISTRARS_KEY = 'auditor-certificados.authorized-registrars.v1';
+
+/**
+ * Lista de correos que pueden llegar hasta el registro real en el libro.
+ * Se edita desde Administración, sin tocar código ni Vercel.
+ *
+ * Lista vacía = sin restricción adicional: cualquier correo institucional
+ * (@enap.edu.co) puede registrar, igual que antes de activar este control.
+ */
+export function loadAuthorizedRegistrars(): string[] {
+  try {
+    const stored = window.localStorage.getItem(AUTHORIZED_REGISTRARS_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is string => typeof value === 'string');
+  } catch {
+    return [];
+  }
+}
+
+export function saveAuthorizedRegistrars(emails: string[]): void {
+  try {
+    window.localStorage.setItem(AUTHORIZED_REGISTRARS_KEY, JSON.stringify(emails));
+  } catch {
+    // Sin almacenamiento disponible: la lista solo dura mientras la pestaña
+    // siga abierta, en memoria.
+  }
+}
+
+/** `true` si ese correo puede llegar hasta el registro real. */
+export function isAuthorizedRegistrar(email: string, list: string[]): boolean {
+  if (list.length === 0) return true; // sin lista cargada: no hay restricción extra.
+  const limpio = email.trim().toLowerCase();
+  return list.some((permitido) => permitido.trim().toLowerCase() === limpio);
+}
+
 /** Modo efectivo: si el elegido no está configurado, se cae a `mock`. */
 export function effectiveMode(config: SharePointConfig): SharePointMode {
   if (config.mode === 'graph' && isGraphReady(config)) return 'graph';

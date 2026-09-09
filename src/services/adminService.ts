@@ -10,14 +10,10 @@
  * puede escribir en `Tabla3` es quien tenga permiso sobre el archivo en
  * SharePoint, y eso lo decide SharePoint, no esta pantalla.
  *
- * La sesión de administración vive en `sessionStorage`, no en `localStorage`:
- * dura mientras la pestaña siga abierta (para no pedir la clave de nuevo
- * cada vez que se recarga la página a mitad de una tarea), pero nunca se
- * entra en modo administrador «solo»: una pestaña nueva, o el navegador
- * cerrado y vuelto a abrir, siempre empiezan sin sesión de administración.
+ * La sesión de administración NO se guarda en ningún almacenamiento del
+ * navegador: vive solo en memoria, mientras dure la vista actual. Cualquier
+ * recarga de la página (F5) o apertura nueva vuelve a pedir usuario y clave.
  */
-
-const STORAGE_KEY = 'auditor-certificados.admin.v1';
 
 /** Cuentas de la Oficina de Estadística. Se admite el usuario o el correo. */
 export const ADMIN_ACCOUNTS = [
@@ -46,36 +42,27 @@ export function isAdminAccount(account: string): boolean {
   );
 }
 
-/** Cuenta con la que se abrió el modo administración, si sigue abierta. */
+/**
+ * Ya no se recuerda entre recargas: siempre arranca sin sesión de
+ * administración. Se deja esta función (devuelve siempre `null`) para no
+ * tener que tocar los demás archivos que la llaman al iniciar.
+ */
 export function readAdmin(): string | null {
-  try {
-    const stored = window.sessionStorage.getItem(STORAGE_KEY);
-    return stored && isAdminAccount(stored) ? stored : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /**
  * Abre el modo administración. Devuelve `null` si la cuenta no corresponde o
- * la contraseña no coincide.
+ * la contraseña no coincide. Ya no persiste en ningún almacenamiento: dura
+ * solo mientras el estado de React lo mantenga (es decir, hasta la próxima
+ * recarga de la página).
  */
 export function openAdmin(account: string, password: string): string | null {
   if (!isAdminAccount(account)) return null;
   if (password !== ADMIN_PASSWORD) return null;
-  const limpio = account.trim().toLowerCase();
-  try {
-    window.sessionStorage.setItem(STORAGE_KEY, limpio);
-  } catch {
-    // Sin almacenamiento: el modo dura lo que dure esta interacción.
-  }
-  return limpio;
+  return account.trim().toLowerCase();
 }
 
 export function closeAdmin(): void {
-  try {
-    window.sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Nada que limpiar.
-  }
+  // Nada que limpiar: el modo admin ya no se guarda en el navegador.
 }

@@ -7,9 +7,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { LogOut, Settings } from 'lucide-react';
 import { useState } from 'react';
 
+import { loadAuthorizedRegistrars, saveAuthorizedRegistrars } from './config/appConfig';
 import { AuditStep } from './components/AuditStep';
 import { Escudo, MarcaDeAgua } from './components/Escudo';
 import { HistoryStep } from './components/HistoryStep';
+import { LoginScreen } from './components/LoginScreen';
 import { RegisterStep } from './components/RegisterStep';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Stepper } from './components/Stepper';
@@ -25,6 +27,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [authorizedEmails, setAuthorizedEmails] = useState<string[]>(() => loadAuthorizedRegistrars());
+
+  const saveAuthorizedEmails = (emails: string[]) => {
+    saveAuthorizedRegistrars(emails);
+    setAuthorizedEmails(emails);
+  };
 
   const reachable: WizardStep[] = ['upload', 'history'];
   if (audit.rows.length) reachable.push('audit');
@@ -181,22 +189,39 @@ export default function App() {
 
               {audit.step === 'register' && (
                 <div className="flex flex-1 items-center justify-center">
-                  <RegisterStep
-                    preview={audit.preview}
-                    metadata={audit.metadata}
-                    config={audit.config}
-                    tableInfo={audit.tableInfo}
-                    loading={audit.loading}
-                    error={audit.error}
-                    result={audit.result}
-                    clean={audit.clean}
-                    onInspect={audit.inspect}
-                    onRegister={audit.register}
-                    duplicado={audit.duplicado}
-                    onVerBitacora={() => audit.setStep('history')}
-                    onDownloadCorrected={audit.downloadCorrected}
-                    onReset={audit.reset}
-                  />
+                  {auth.isAuthenticated ? (
+                    <RegisterStep
+                      preview={audit.preview}
+                      metadata={audit.metadata}
+                      config={audit.config}
+                      tableInfo={audit.tableInfo}
+                      loading={audit.loading}
+                      error={audit.error}
+                      result={audit.result}
+                      clean={audit.clean}
+                      onInspect={audit.inspect}
+                      onRegister={audit.register}
+                      duplicado={audit.duplicado}
+                      onVerBitacora={() => audit.setStep('history')}
+                      onDownloadCorrected={audit.downloadCorrected}
+                      onReset={audit.reset}
+                    />
+                  ) : (
+                    // Cargar y auditar no piden nada; solo al llegar aquí, a
+                    // escribir de verdad en el libro, se exige demostrar con
+                    // un código que el correo es uno de los autorizados.
+                    <LoginScreen
+                      stage={auth.stage}
+                      pendingEmail={auth.pendingEmail}
+                      demoCode={auth.demoCode}
+                      sendingCode={auth.sendingCode}
+                      error={auth.error}
+                      onRequestCode={auth.requestCode}
+                      onVerifyCode={auth.verifyCode}
+                      onResendCode={auth.resendCode}
+                      onChangeEmail={auth.changeEmail}
+                    />
+                  )}
                 </div>
               )}
 
@@ -252,6 +277,8 @@ export default function App() {
         adminMensaje={audit.adminMensaje}
         onAbrirAdmin={audit.abrirAdmin}
         onCerrarAdmin={audit.cerrarAdmin}
+        authorizedEmails={authorizedEmails}
+        onSaveAuthorizedEmails={saveAuthorizedEmails}
       />
     </div>
   );

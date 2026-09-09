@@ -83,6 +83,7 @@ export const ACCENT_NAMES: Record<string, string> = {
  "GARZON": "GARZÓN",
  "GERMAN": "GERMÁN",
  "GOMEZ": "GÓMEZ",
+ "GONGORA": "GÓNGORA",
  "GONZALEZ": "GONZÁLEZ",
  "GUIZA": "GÜIZA",
  "GUTIERREZ": "GUTIÉRREZ",
