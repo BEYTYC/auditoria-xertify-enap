@@ -104,6 +104,14 @@ export default function App() {
                     <span className="sr-only">Cerrar sesión</span>
                   </button>
                 </div>
+                {audit.admin && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-gold-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gold-300"
+                    title={`Administración abierta como ${audit.admin}`}
+                  >
+                    Admin
+                  </span>
+                )}
                 {auth.session?.email && (
                   <p
                     className="hidden max-w-[180px] truncate text-[10px] text-navy-300 sm:block"
