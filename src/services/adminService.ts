@@ -9,6 +9,12 @@
  * Esto es una barrera contra el accidente, no una cerradura: quien de verdad
  * puede escribir en `Tabla3` es quien tenga permiso sobre el archivo en
  * SharePoint, y eso lo decide SharePoint, no esta pantalla.
+ *
+ * La sesión de administración vive en `sessionStorage`, no en `localStorage`:
+ * dura mientras la pestaña siga abierta (para no pedir la clave de nuevo
+ * cada vez que se recarga la página a mitad de una tarea), pero nunca se
+ * entra en modo administrador «solo»: una pestaña nueva, o el navegador
+ * cerrado y vuelto a abrir, siempre empiezan sin sesión de administración.
  */
 
 const STORAGE_KEY = 'auditor-certificados.admin.v1';
@@ -43,7 +49,7 @@ export function isAdminAccount(account: string): boolean {
 /** Cuenta con la que se abrió el modo administración, si sigue abierta. */
 export function readAdmin(): string | null {
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = window.sessionStorage.getItem(STORAGE_KEY);
     return stored && isAdminAccount(stored) ? stored : null;
   } catch {
     return null;
@@ -59,16 +65,16 @@ export function openAdmin(account: string, password: string): string | null {
   if (password !== ADMIN_PASSWORD) return null;
   const limpio = account.trim().toLowerCase();
   try {
-    window.localStorage.setItem(STORAGE_KEY, limpio);
+    window.sessionStorage.setItem(STORAGE_KEY, limpio);
   } catch {
-    // Sin almacenamiento: el modo dura lo que dure la pestaña.
+    // Sin almacenamiento: el modo dura lo que dure esta interacción.
   }
   return limpio;
 }
 
 export function closeAdmin(): void {
   try {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     // Nada que limpiar.
   }

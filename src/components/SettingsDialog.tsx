@@ -112,7 +112,10 @@ export function SettingsDialog({
             </span>
             <button
               type="button"
-              onClick={onCerrarAdmin}
+              onClick={() => {
+                onCerrarAdmin();
+                onClose();
+              }}
               className="btn-ghost px-2 py-1 text-[12px]"
               title="Cerrar la sesión de administración"
             >
