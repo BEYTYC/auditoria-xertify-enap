@@ -4,14 +4,16 @@
  * uso. Mientras no haya un servicio de correo conectado, el código se
  * muestra en pantalla (bloque marcado como modo de prueba) en lugar de
  * enviarse; el usuario de prueba «admin» entra sin ninguno de los dos pasos.
+ *
+ * Se muestra incrustada dentro del paso «Registro oficial», que ya trae su
+ * propio membrete institucional arriba — por eso este componente es solo la
+ * tarjeta, sin repetir escudo ni encabezado, para que quepa sin scroll.
  */
 
 import { AlertCircle, KeyRound, Mail, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { ALLOWED_EMAIL_DOMAIN } from '../data/auth';
-import { INSTITUCION } from '../data/brand';
-import { Escudo } from './Escudo';
 
 interface LoginScreenProps {
   stage: 'email' | 'code';
@@ -40,34 +42,17 @@ export function LoginScreen({
   const [code, setCode] = useState('');
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-slate-50">
-      <div className="bg-navy-900">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-4 px-4 py-4">
-          <Escudo height={44} variant="sobre-oscuro" className="shrink-0" />
-          <div className="min-w-0 leading-tight">
-            <h1 className="truncate text-[13px] font-semibold text-white sm:text-[14px]">
-              {INSTITUCION.nombre}
-            </h1>
-            <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-400">
-              {INSTITUCION.dependencia}
-            </p>
-            <p className="mt-0.5 text-[10px] text-navy-300 sm:truncate">{INSTITUCION.ciudad}</p>
-          </div>
-        </div>
-      </div>
-      <div className="h-1 bg-gold-500" />
-
-      <main className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm">
-          <header className="mb-6 text-center">
-            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-700">
-              <ShieldCheck size={24} />
-            </span>
-            <h2 className="mt-3 text-lg font-semibold text-navy-900">Acceso institucional</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Auditoría de Plantillas Xertify y Registro de Cursos de Extensión
-            </p>
-          </header>
+    <div className="flex w-full items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <header className="mb-6 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-700">
+            <ShieldCheck size={24} />
+          </span>
+          <h2 className="mt-3 text-lg font-semibold text-navy-900">Acceso para registrar</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Confirme su correo institucional autorizado para continuar con el registro oficial.
+          </p>
+        </header>
 
           <div className="card px-6 py-6">
             {stage === 'email' && (
@@ -167,15 +152,7 @@ export function LoginScreen({
               </div>
             )}
           </div>
-
-          <p className="mt-4 text-center text-[12px] font-semibold text-slate-200">
-            Desarrollado por PD02 Beyty P. Camargo M.
-          </p>
-          <p className="mt-0.5 text-center text-[11px] text-slate-400">
-            {INSTITUCION.dependencia}
-          </p>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
