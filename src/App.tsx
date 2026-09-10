@@ -15,6 +15,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { RegisterStep } from './components/RegisterStep';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Stepper } from './components/Stepper';
+import { TemplatesMenu } from './components/TemplatesMenu';
 import { UploadStep } from './components/UploadStep';
 import { INSTITUCION } from './data/brand';
 import { useAudit } from './hooks/useAudit';
@@ -137,12 +138,13 @@ export default function App() {
         <div className="h-1 bg-gold-500" />
 
         <div className="border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto max-w-[1400px] px-4 py-1.5">
+          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-1.5">
             <Stepper
               current={audit.step}
               reachable={reachable}
               onSelect={audit.setStep}
             />
+            {audit.step === 'upload' && <TemplatesMenu />}
           </div>
         </div>
       </div>

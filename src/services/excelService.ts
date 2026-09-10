@@ -207,7 +207,8 @@ export async function readTemplate(file: File): Promise<ParsedTemplate> {
   const activeFields = new Set<CanonicalField>(bestByField.keys());
 
   const missingRequired = FIELD_LIST.filter(
-    (spec) => spec.requirement !== 'opcional' && !activeFields.has(spec.field),
+    (spec) =>
+      spec.requirement !== 'opcional' && !spec.columnOptional && !activeFields.has(spec.field),
   ).map((spec) => spec.field);
 
   const seenHeaders = new Set<string>();
@@ -293,7 +294,8 @@ export function remapColumn(
   );
 
   const missingRequired = FIELD_LIST.filter(
-    (spec) => spec.requirement !== 'opcional' && !activeFields.has(spec.field),
+    (spec) =>
+      spec.requirement !== 'opcional' && !spec.columnOptional && !activeFields.has(spec.field),
   ).map((spec) => spec.field);
 
   return {

@@ -40,6 +40,15 @@ export interface FieldSpec {
   aliases: string[];
   /** Ancho sugerido de la columna en la tabla de la UI. */
   width: number;
+  /**
+   * `true` si la COLUMNA puede faltar por completo en la plantilla sin que
+   * eso cuente como «falta una columna obligatoria» (algunas plantillas,
+   * como Cursos PreAntártico, solo llevan dos firmantes y nunca traen esta
+   * columna). No afecta la otra regla: si la columna sí viene en el archivo,
+   * cada celda sigue exigiéndose igual que cualquier campo `requirement`
+   * distinto de `opcional`.
+   */
+  columnOptional?: boolean;
 }
 
 export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
@@ -293,6 +302,10 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
     kind: 'nombre',
     aliases: ['nomfirma3', 'firmante 3', 'nombre firmante 3'],
     width: 190,
+    // Cursos PreAntártico solo lleva dos firmantes y nunca trae esta
+    // columna: que falte del todo no cuenta como columna obligatoria
+    // faltante. Si la plantilla sí la trae, cada celda se sigue exigiendo.
+    columnOptional: true,
   },
   li: {
     field: 'li',
