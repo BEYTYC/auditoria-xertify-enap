@@ -56,10 +56,6 @@ export function TemplatesMenu() {
           'group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100',
         ].join(' ')}
       >
-        <p className="px-2 pb-1.5 pt-1 text-xs text-slate-500">
-          Este archivo no corresponde a la plantilla oficial de Cursos de Extensión de la Oficina
-          de Estadística. Descargue la plantilla oficial en el botón Descarga de plantillas.
-        </p>
         <ul className="flex flex-col gap-1">
           {OFFICIAL_TEMPLATES.map((plantilla) => (
             <li key={plantilla.archivo}>

@@ -44,7 +44,13 @@ import {
 } from './numberingService';
 import { suggestOffice } from './officeService';
 import { isEnyeChange, restoreAccents, toTitleCase } from './textUtils';
-import { canonicalCity, canonicalName, validateRow } from './validatorService';
+import {
+  canonicalCity,
+  canonicalName,
+  canonicalResponsable,
+  startsWithGrado,
+  validateRow,
+} from './validatorService';
 import { CANONICAL_FIELDS, type CanonicalField, type StudentRow } from '../types';
 
 /* ------------------------------------------------------------------ */
@@ -1051,6 +1057,21 @@ describe('grados militares en los firmantes', () => {
     expect(suggestionFor({ nomfirma1: 'CA Dario Eduardo Sanabria Gaitan' }, 'nomfirma1')).toBe(
       'CA Darío Eduardo Sanabria Gaitán',
     );
+  });
+});
+
+describe('códigos de grado institucional con número pegado (PD, OD, AS, AA, TS, DO, DV)', () => {
+  it('«startsWithGrado» reconoce el código con uno o dos dígitos pegados', () => {
+    expect(startsWithGrado('PD02')).toBe(true);
+    expect(startsWithGrado('OD16')).toBe(true);
+    expect(startsWithGrado('AS7')).toBe(true);
+    expect(startsWithGrado('DV')).toBe(true);
+  });
+
+  it('«canonicalResponsable» separa el código y corrige el resto del nombre', () => {
+    expect(canonicalResponsable('PD02 Beyty P. Camargo M.')).toBe('PD02 Beyty P Camargo M');
+    expect(canonicalResponsable('od16 maria jose perez')).toBe('OD16 María José Pérez');
+    expect(canonicalResponsable('as7 carlos gomez')).toBe('AS7 Carlos Gómez');
   });
 });
 

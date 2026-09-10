@@ -272,6 +272,23 @@ export const NEVER_ACCENTED = new Set<string>(['ruiz', 'luis', 'cruz']);
 export const CIVILIAN_TITLES = new Set<string>(['DO']);
 
 /**
+ * Códigos de grado del personal de la institución (no son grados militares
+ * navales): PD, OD, AS, AA, TS, DO y DV. A diferencia de los grados
+ * militares, estos siempre llevan pegado un número de uno o dos dígitos que
+ * identifica a la persona dentro de ese grado — «PD02», «OD16» — así que se
+ * reconocen con un patrón, no con una lista cerrada de palabras exactas.
+ * Ejemplo: «PD02 Beyty P. Camargo M.».
+ */
+export const STAFF_GRADE_CODES = ['PD', 'OD', 'AS', 'AA', 'TS', 'DO', 'DV'] as const;
+
+const STAFF_GRADE_PATTERN = new RegExp(`^(?:${STAFF_GRADE_CODES.join('|')})\\d{0,2}$`);
+
+/** `true` si `upper` (ya en mayúscula, sin tildes) es uno de estos códigos, con o sin número pegado. */
+export function isStaffGradeCode(upper: string): boolean {
+  return STAFF_GRADE_PATTERN.test(upper);
+}
+
+/**
  * Apellidos donde `n` y `ñ` corresponden a DOS apellidos distintos y reales,
  * no a un descuido de digitación. En estos la app propone la grafía con ñ
  * pero nunca la aplica sola: el nombre de una persona en un certificado no se

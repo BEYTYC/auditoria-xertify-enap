@@ -146,7 +146,7 @@ export async function readTemplate(file: File): Promise<ParsedTemplate> {
   if (!isOfficialTemplate(workbook)) {
     throw new Error(
       'Este archivo no es la plantilla oficial de Cursos de Extensión: no trae la validación ' +
-        'de la Oficina de Estadística. Descargue la plantilla oficial más abajo y cárguela sin ' +
+        'de la Oficina de Estadística. Descargue la plantilla oficial en el link de arriba, sin ' +
         'modificar su estructura.',
     );
   }

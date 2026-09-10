@@ -211,6 +211,25 @@ async function acquireToken(config: SharePointConfig): Promise<string> {
   return popup.accessToken;
 }
 
+/**
+ * Adjunto en el formato que espera Graph (`sendMail`), a partir del
+ * `attachment` ya armado en `EmailContext`. `undefined` si no hay adjunto que
+ * mandar: el correo se envía igual, solo que sin archivo.
+ */
+function graphAttachments(
+  context: EmailContext,
+): Array<Record<string, unknown>> | undefined {
+  if (!context.attachment) return undefined;
+  return [
+    {
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: context.attachment.fileName,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      contentBytes: context.attachment.contentBase64,
+    },
+  ];
+}
+
 /** Cuerpo HTML del correo de confirmación del registro. */
 function receiptEmailHtml(context: EmailContext): string {
   const escapado = (texto: string) =>
@@ -556,6 +575,7 @@ export class GraphAdapter implements SharePointAdapter {
             body: { contentType: 'HTML', content: receiptEmailHtml(context) },
             toRecipients: [{ emailAddress: { address: context.correoResponsable } }],
             ...(mailFrom ? { from: { emailAddress: { address: mailFrom } } } : {}),
+            ...(graphAttachments(context) ? { attachments: graphAttachments(context) } : {}),
           },
           saveToSentItems: true,
         }),

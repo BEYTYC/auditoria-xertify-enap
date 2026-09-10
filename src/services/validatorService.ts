@@ -21,6 +21,7 @@ import {
   AMBIGUOUS_ACCENTS,
   AMBIGUOUS_ENYE,
   CIVILIAN_TITLES,
+  isStaffGradeCode,
   MILITARY_RANKS,
   NAME_CONNECTORS,
   NEVER_ACCENTED,
@@ -224,6 +225,10 @@ export function canonicalName(raw: string): string {
       // misma prioridad, antes del chequeo de conectores: si no, «DO»
       // colisiona con «do» (conector de apellido portugués) y pierde la
       // mayúscula.
+      // Los códigos de grado institucional con número pegado («PD02»,
+      // «OD16»…) NO se tratan aquí: son propios del campo «Responsable que
+      // valida» (ver `canonicalResponsable`), no de los firmantes de la
+      // plantilla («nomfirma1/2/3»), que siguen usando solo grados militares.
       if (MILITARY_RANKS.has(upper) || CIVILIAN_TITLES.has(upper)) {
         const token = `\u0000${acronyms.size}\u0000`;
         acronyms.set(token, upper);
@@ -291,7 +296,9 @@ function extractRank(raw: string): string | null {
  * letras, en cualquier combinación de mayúsculas o minúsculas —no hace falta
  * que esté en el catálogo de grados militares, porque la Infantería de
  * Marina y el personal civil usan siglas que no siempre coinciden con esa
- * lista («DO», «OD», «PD»…)—.
+ * lista («DO», «OD», «PD»…)—; o uno de los códigos de grado institucional de
+ * quien diligencia la plantilla, que siempre traen su número pegado, sin
+ * espacio («PD02», «OD16»…: ver `isStaffGradeCode`).
  *
  * No se descarta por coincidir con un conector de apellido («do», «de»…):
  * en este campo la primera palabra siempre es el grado, nunca un conector,
@@ -299,29 +306,37 @@ function extractRank(raw: string): string | null {
  * («DO» leído como el conector portugués en vez de como grado).
  *
  * La usa el campo «Responsable que valida»: ese responsable siempre firma
- * con su grado, así que el campo no se da por completo si falta.
+ * con su grado, así que el campo no se da por completo si falta. Este campo
+ * es el único que reconoce los códigos con número pegado — los firmantes de
+ * la plantilla («nomfirma1/2/3») siguen usando solo grados militares, sin
+ * cambios.
  */
 export function startsWithGrado(raw: string): boolean {
   const first = collapseSpaces(raw).split(' ')[0] ?? '';
   if (!first) return false;
   const bare = first.replace(/[’'-]/g, '');
-  return /^\p{L}{2,}$/u.test(bare);
+  if (/^\p{L}{2,}$/u.test(bare)) return true;
+  return isStaffGradeCode(stripAccents(bare).toLocaleUpperCase('es-CO'));
 }
 
 /**
  * Ortografía canónica del campo «Responsable que valida»: la primera palabra
  * siempre es el grado en siglas y en mayúscula —sin importar cómo se haya
  * escrito—, y el resto sigue las mismas reglas de un nombre (`canonicalName`).
+ *
+ * El grado se extrae del texto ORIGINAL, antes de limpiarlo: `cleanNameChars`
+ * quita cualquier carácter que no sea letra, y los códigos de grado
+ * institucional («PD02», «OD16»…) llevan un número pegado que esa limpieza
+ * borraría antes de que hubiera oportunidad de reconocerlo.
  */
 export function canonicalResponsable(raw: string): string {
-  const cleaned = cleanNameChars(raw);
-  const words = cleaned.split(' ');
-  const first = words[0] ?? '';
+  const trimmed = collapseSpaces(raw);
+  const first = trimmed.split(' ')[0] ?? '';
 
   if (!startsWithGrado(first)) return canonicalName(raw);
 
-  const grado = stripAccents(first).toLocaleUpperCase('es-CO');
-  const resto = words.slice(1).join(' ');
+  const grado = stripAccents(first.replace(/[’'-]/g, '')).toLocaleUpperCase('es-CO');
+  const resto = trimmed.slice(first.length).trim();
   const restoCanonico = resto ? canonicalName(resto) : '';
   return restoCanonico ? `${grado} ${restoCanonico}` : grado;
 }

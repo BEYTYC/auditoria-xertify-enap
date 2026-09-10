@@ -43,6 +43,7 @@ import { closeAdmin, isAdminAccount, openAdmin, readAdmin } from '../services/ad
 import { suggestOffice } from '../services/officeService';
 import {
   annulEntry,
+  applyLedger,
   attachTemplate,
   clearLog,
   inspectDestination,
@@ -347,6 +348,17 @@ export function useAudit() {
         config,
         lastPosition: info?.lastPosition ?? lastPosition,
         lastConsecutivo: info?.lastConsecutivo ?? lastConsecutivo,
+        // Con esto el correo de confirmación puede llevar adjunta la misma
+        // plantilla ya con el registro asentado (ver registryService.ts).
+        template: parsed
+          ? {
+              buffer: parsed.buffer,
+              sheetName: parsed.sheetName,
+              firstDataRow: parsed.firstDataRow,
+              mappings: parsed.map.mappings,
+              fileName: parsed.fileName,
+            }
+          : undefined,
       });
       setResult(outcome);
       setLog(readLog());
@@ -357,7 +369,7 @@ export function useAudit() {
         try {
           const blob = patchTemplate(
             parsed.buffer,
-            applyLedger(rows, { receipt: outcome.receipt }),
+            applyLedger(rows, outcome.receipt.allocation),
             {
               sheetName: parsed.sheetName,
               firstDataRow: parsed.firstDataRow,
@@ -532,7 +544,7 @@ export function useAudit() {
     const asentado = result?.receipt ?? preview?.receipt ?? null;
     return patchTemplate(
       parsed.buffer,
-      applyLedger(rows, asentado ? { receipt: asentado } : null),
+      applyLedger(rows, asentado ? asentado.allocation : null),
       {
         sheetName: parsed.sheetName,
         firstDataRow: parsed.firstDataRow,
@@ -627,27 +639,4 @@ function mostFrequent(values: string[]): string | null {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-}
-
-/** Escribe la numeración asignada en las columnas `li`, `fo` y `numre`. */
-function applyLedger(
-  rows: StudentRow[],
-  preview: { receipt: { allocation: { positions: LedgerPosition[] } } } | null,
-): StudentRow[] {
-  if (!preview) return rows;
-  const positions = preview.receipt.allocation.positions;
-
-  return rows.map((row, index) => {
-    const position = positions[index];
-    if (!position) return row;
-    return {
-      ...row,
-      cells: {
-        ...row.cells,
-        li: { ...row.cells.li, value: String(position.libro) },
-        fo: { ...row.cells.fo, value: String(position.folio) },
-        numre: { ...row.cells.numre, value: String(position.registro) },
-      },
-    };
-  });
 }

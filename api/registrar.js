@@ -204,11 +204,26 @@ async function enviarCorreo(payload) {
           Jefe de Estadística<br/>
           Escuela Naval de Cadetes "Almirante Padilla"</p>
           <p style="color:#888;font-size:12px;">Este es un mensaje generado automáticamente por
-          el Sistema de Auditoría de Plantillas Xertify y Registro de Cursos de Extensión.
-          Por favor no responda a esta dirección.</p>
+          el Sistema de Auditoría de Plantillas Xertify y Registro de Cursos de Extensión.</p>
         `,
       },
       toRecipients: [{ emailAddress: { address: payload.correoResponsable } }],
+      // La app manda la plantilla ya con el registro asentado, codificada en
+      // base64, en `payload.attachment`. Si por algún motivo no llegó, el
+      // correo se manda igual, solo que sin adjunto.
+      ...(payload.attachment
+        ? {
+            attachments: [
+              {
+                '@odata.type': '#microsoft.graph.fileAttachment',
+                name: payload.attachment.fileName,
+                contentType:
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                contentBytes: payload.attachment.contentBase64,
+              },
+            ],
+          }
+        : {}),
     },
     saveToSentItems: true,
   };

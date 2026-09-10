@@ -353,6 +353,17 @@ export interface EmailContext {
   correoResponsable: string;
   curso: string;
   idRegistro: string;
+  /**
+   * La plantilla ya con el registro asentado (numeración de libro/folio/
+   * registro incluida), para adjuntarla al correo de confirmación. Si no se
+   * pudo generar —por ejemplo, si no queda el archivo original a mano—, el
+   * correo se manda igual, solo que sin adjunto.
+   */
+  attachment?: {
+    fileName: string;
+    /** Contenido del .xlsx codificado en base64, listo para Graph. */
+    contentBase64: string;
+  };
 }
 
 export interface RegistrationResult {

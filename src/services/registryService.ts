@@ -11,6 +11,7 @@ import {
   type BatchMetadata,
   type BatchReceipt,
   type BatchStats,
+  type ColumnMapping,
   type DatabaseRow,
   type LedgerPosition,
   type LogEntry,
@@ -20,6 +21,7 @@ import {
 } from '../types';
 import { computeMetrics, isBatchClean } from './correctorService';
 import { buildDatabaseRows } from './databaseService';
+import { blobToBase64, correctedFileName, fileDateFromIso } from './excelService';
 import { allocate, buildBatchId, describeAllocation } from './numberingService';
 import {
   createAdapter,
@@ -27,6 +29,7 @@ import {
   type SharePointAdapter,
   type TableInfo,
 } from './sharepointService';
+import { patchTemplate } from './xlsxPatchService';
 
 /* ------------------------------------------------------------------ */
 /* Bitácora local                                                       */
@@ -135,6 +138,42 @@ export interface RegistrationRequest {
   lastPosition: LedgerPosition;
   /** Último consecutivo `N` de Tabla3. */
   lastConsecutivo: number;
+  /**
+   * Plantilla original, para poder adjuntar al correo de confirmación la
+   * misma plantilla ya con el registro asentado (numeración incluida). Si no
+   * se manda —por ejemplo, si por algún motivo no queda el archivo original a
+   * mano—, el correo sale igual, solo que sin adjunto.
+   */
+  template?: {
+    buffer: ArrayBuffer;
+    sheetName: string;
+    firstDataRow: number;
+    mappings: ColumnMapping[];
+    fileName: string;
+  };
+}
+
+/** Escribe la numeración asignada en las columnas `li`, `fo` y `numre`. */
+export function applyLedger(
+  rows: StudentRow[],
+  allocation: { positions: LedgerPosition[] } | null,
+): StudentRow[] {
+  if (!allocation) return rows;
+  const positions = allocation.positions;
+
+  return rows.map((row, index) => {
+    const position = positions[index];
+    if (!position) return row;
+    return {
+      ...row,
+      cells: {
+        ...row.cells,
+        li: { ...row.cells.li, value: String(position.libro) },
+        fo: { ...row.cells.fo, value: String(position.folio) },
+        numre: { ...row.cells.numre, value: String(position.registro) },
+      },
+    };
+  });
 }
 
 export interface RegistrationPreview {
@@ -295,11 +334,44 @@ export async function registerBatch(
 
     // El correo se intenta solo después de que el registro quedó en firme:
     // si falla, no debe verse como si el registro tampoco hubiera quedado.
+    //
+    // Se le adjunta la misma plantilla que queda guardada en la bitácora, ya
+    // con el registro asentado (numeración de libro/folio/registro
+    // incluida). Si por lo que sea no se puede armar el adjunto —no llegó el
+    // archivo original, quedó sin espacio, etc.—, el correo se manda igual,
+    // solo que sin adjunto: eso nunca debe verse como si el registro hubiera
+    // fallado.
+    let attachment: { fileName: string; contentBase64: string } | undefined;
+    if (request.template) {
+      try {
+        const blob = patchTemplate(
+          request.template.buffer,
+          applyLedger(request.rows, receipt.allocation),
+          {
+            sheetName: request.template.sheetName,
+            firstDataRow: request.template.firstDataRow,
+            mappings: request.template.mappings,
+          },
+        );
+        attachment = {
+          fileName: correctedFileName(
+            receipt.curso,
+            fileDateFromIso(receipt.timestampIso),
+            request.template.fileName,
+          ),
+          contentBase64: await blobToBase64(blob),
+        };
+      } catch {
+        // Sin adjunto: el correo se manda de todas formas, más abajo.
+      }
+    }
+
     const notification = await adapter.notify({
       responsable: request.metadata.responsable,
       correoResponsable: request.metadata.correoResponsable,
       curso: receipt.curso,
       idRegistro: receipt.idRegistro,
+      attachment,
     });
 
     return {
