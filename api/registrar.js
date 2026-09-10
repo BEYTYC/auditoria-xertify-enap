@@ -199,7 +199,9 @@ async function enviarCorreo(payload) {
           consignada en la base de datos institucional. Si encuentra alguna inconsistencia en
           los datos registrados, por favor comuníquese con la Oficina de Estadística a la
           brevedad para su corrección.</p>
-          <p>Cordialmente,<br/>Oficina de Estadística<br/>
+          <p>Cordialmente,<br/>
+          PD02 Beyty P. Camargo M.<br/>
+          Jefe de Estadística<br/>
           Escuela Naval de Cadetes "Almirante Padilla"</p>
           <p style="color:#888;font-size:12px;">Este es un mensaje generado automáticamente por
           el Sistema de Auditoría de Plantillas Xertify y Registro de Cursos de Extensión.

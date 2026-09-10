@@ -681,7 +681,7 @@ export class WebhookAdapter implements SharePointAdapter {
 
       return {
         sent: true,
-        message: 'Se avisó al flujo de Power Automate para que envíe el correo de confirmación.',
+        message: `Correo de confirmación enviado a ${context.correoResponsable}.`,
       };
     } catch (error) {
       const detalle =
