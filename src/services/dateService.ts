@@ -395,3 +395,108 @@ export function isCanonicalSpanishRange(text: string): boolean {
   const sinDeFinal = canonical.replace(/ de (\d{4})$/, ' $1');
   return actual === canonical || actual === sinDeFinal;
 }
+
+/* ------------------------------------------------------------------ */
+/* Rangos de fechas en inglés (columna `startdate` / `start date`)      */
+/* ------------------------------------------------------------------ */
+
+/** Separador admitido entre las dos fechas de un rango en inglés: «to». */
+const RANGE_SEPARATOR_EN = /\s+to\s+/i;
+
+/** Quita prefijos que a veces se anteponen al rango: «between the …». */
+function stripLeadingBetween(text: string): string {
+  return text.replace(/^between\s+(?:the\s+)?/i, '');
+}
+
+/**
+ * Interpreta un rango en inglés. Acepta que el mes o el año aparezcan una
+ * sola vez en el extremo izquierdo:
+ *   «August 31 to September 4, 2026»
+ *   «February 1 to 5, 2025»
+ *   «December 30, 2025 to January 4, 2026»
+ * También tolera el prefijo «between the» y el cero inicial en el día
+ * («September 04»), aunque el formato exigido nunca los lleve.
+ * Devuelve `null` si el texto no es un rango reconocible.
+ */
+export function parseEnglishDateRange(raw: unknown): ParsedRange | null {
+  const text = stripLeadingBetween(collapseSpaces(String(raw ?? '')));
+  if (!text) return null;
+
+  const parts = text.split(RANGE_SEPARATOR_EN);
+  if (parts.length !== 2) return null;
+
+  const [left, right] = parts.map((part) => collapseSpaces(part));
+  if (!left || !right) return null;
+
+  const order = (start: ParsedDate, end: ParsedDate): ParsedRange | null => {
+    const startNumber = start.year * 10000 + start.month * 100 + start.day;
+    const endNumber = end.year * 10000 + end.month * 100 + end.day;
+    return startNumber > endNumber ? null : { start, end };
+  };
+
+  // Caso más frecuente: el extremo derecho viene completo, con mes y año
+  // («September 4, 2026»). De ahí salen el mes y/o el año que le falten
+  // al izquierdo.
+  const fullEnd = parseAnyDate(right);
+  if (fullEnd) {
+    const start =
+      parseAnyDate(left) ??
+      // «August 31» → le falta el año
+      parseAnyDate(`${left}, ${fullEnd.year}`) ??
+      // «1» → le faltan mes y año
+      parseAnyDate(`${MONTHS_EN[fullEnd.month - 1]} ${left}, ${fullEnd.year}`);
+    return start ? order(start, fullEnd) : null;
+  }
+
+  // Mismo mes: el derecho solo trae día y año («5, 2025») y el mes lo pone
+  // el izquierdo, que en ese caso sí debe traer mes y día completos
+  // («February 1 to 5, 2025»).
+  const dayYear = right.match(/^(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})$/);
+  const leftMonthDay = left.match(/^([a-zA-Z]+)\.?\s+\d{1,2}(?:st|nd|rd|th)?$/);
+  if (dayYear && leftMonthDay) {
+    const [, endDay, endYear] = dayYear;
+    const [, monthWord] = leftMonthDay;
+    const start = parseAnyDate(`${left}, ${endYear}`);
+    const end = parseAnyDate(`${monthWord} ${endDay}, ${endYear}`);
+    if (!start || !end) return null;
+    return order(start, end);
+  }
+
+  return null;
+}
+
+/**
+ * `January 1, 2025` — como `formatEnglish`, pero sin sufijo ordinal: el
+ * rango en inglés exigido por la institución escribe el día pelado
+ * («August 31», no «August 31st»).
+ */
+function formatEnglishPlain(date: ParsedDate): string {
+  return `${MONTHS_EN[date.month - 1]} ${date.day}, ${date.year}`;
+}
+
+/**
+ * Escribe el rango en inglés en la forma exigida:
+ *   mismo mes y año  → «February 1 to 5, 2025»
+ *   distinto mes     → «August 31 to September 4, 2026»
+ *   distinto año     → «December 30, 2025 to January 4, 2026»
+ * Sin prefijo «between the», meses en mayúscula inicial y sin cero inicial
+ * ni sufijo ordinal en los días.
+ */
+export function formatEnglishRange(range: ParsedRange): string {
+  const { start, end } = range;
+
+  if (start.year === end.year && start.month === end.month) {
+    return `${MONTHS_EN[start.month - 1]} ${start.day} to ${end.day}, ${start.year}`;
+  }
+  if (start.year === end.year) {
+    return `${MONTHS_EN[start.month - 1]} ${start.day} to ${MONTHS_EN[end.month - 1]} ${end.day}, ${start.year}`;
+  }
+  return `${formatEnglishPlain(start)} to ${formatEnglishPlain(end)}`;
+}
+
+/** `true` si el texto ya está escrito exactamente como el rango canónico en inglés. */
+export function isCanonicalEnglishRange(text: string): boolean {
+  const range = parseEnglishDateRange(text);
+  if (!range) return false;
+  return text.trim() === formatEnglishRange(range);
+}

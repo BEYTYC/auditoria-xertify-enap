@@ -113,10 +113,43 @@ function cellToText(value: unknown, field: CanonicalField | null): string {
   return toText(value).replace(/ /g, ' ');
 }
 
+/**
+ * Nombre de la hoja y el texto que debe traer su celda A1 en la plantilla
+ * oficial. No es una lista de validación más: es la marca de control con la
+ * que la Oficina de Estadística blinda el registro, para que no cuele un
+ * Excel armado a mano o una plantilla vieja como si fuera la oficial.
+ */
+const VALIDATION_SHEET = 'Parameters';
+const VALIDATION_CELL = 'A1';
+// «Validación» a secas es la marca de una plantilla vieja: ya no basta. Si
+// alguien carga una así, cae en el mismo rechazo que un archivo cualquiera
+// y se le pide bajar la plantilla oficial otra vez.
+const VALIDATION_TEXT = 'Validación2';
+
+/** `true` si el libro trae, en `Parameters!A1`, la marca de la plantilla oficial. */
+export function isOfficialTemplate(workbook: XLSX.WorkBook): boolean {
+  const sheetName = workbook.SheetNames.find(
+    (name) => normalizeKey(name) === normalizeKey(VALIDATION_SHEET),
+  );
+  if (!sheetName) return false;
+
+  const cell = workbook.Sheets[sheetName]?.[VALIDATION_CELL];
+  const text = toText(cell?.v ?? '').trim();
+  return normalizeKey(text) === normalizeKey(VALIDATION_TEXT);
+}
+
 /** Lee un archivo .xlsx/.xls y arma el lote de auditoría. */
 export async function readTemplate(file: File): Promise<ParsedTemplate> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { cellDates: true, cellNF: false, cellText: false });
+
+  if (!isOfficialTemplate(workbook)) {
+    throw new Error(
+      'Este archivo no es la plantilla oficial de Cursos de Extensión: no trae la validación ' +
+        'de la Oficina de Estadística. Descargue la plantilla oficial más abajo y cárguela sin ' +
+        'modificar su estructura.',
+    );
+  }
 
   const sheetName =
     workbook.SheetNames.find((name) => normalizeKey(name) === normalizeKey(TEMPLATE_SHEET)) ??

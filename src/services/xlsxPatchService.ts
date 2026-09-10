@@ -374,7 +374,7 @@ export function patchTemplate(
   dropCalcChain(files);
   normalizeFonts(files);
   hideSheetByName(files, 'Parameters');
-  setZoom100(files);
+  setZoomLevel(files, DEFAULT_ZOOM);
 
   // El archivo que subió la facultad puede venir de una descarga previa de
   // `annotateTemplate` (amarillos + comentarios) a la que solo se le
@@ -512,11 +512,11 @@ export function annotateTemplate(
   }
 
   // El archivo que se entrega —tenga o no novedades— siempre sale con el
-  // mismo formato: fuente Aptos, `Parameters` oculta y zoom al 100 %.
+  // mismo formato: fuente Aptos, `Parameters` oculta y zoom al 80 %.
   dropCalcChain(files);
   normalizeFonts(files);
   hideSheetByName(files, 'Parameters');
-  setZoom100(files);
+  setZoomLevel(files, DEFAULT_ZOOM);
 
   return new Blob([zipSync(files)], { type: XLSX_MIME });
 }
@@ -1029,13 +1029,14 @@ function normalizeFonts(files: Record<string, Uint8Array>): void {
 }
 
 /**
- * Fuerza el zoom al 100 % en todas las hojas del libro.
+ * Fuerza el zoom indicado en todas las hojas del libro.
  *
  * Excel guarda el zoom con el que se cerró por última vez la plantilla, así
  * que cada facultad la entrega con el suyo. El archivo que sale siempre abre
- * al 100 %, sin importar cómo venía.
+ * al mismo nivel —80 %, a pedido de la Oficina de Estadística—, sin importar
+ * cómo venía.
  */
-function setZoom100(files: Record<string, Uint8Array>): void {
+function setZoomLevel(files: Record<string, Uint8Array>, percent: number): void {
   for (const path of Object.keys(files)) {
     if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) continue;
     const xml = strFromU8(files[path]);
@@ -1048,13 +1049,16 @@ function setZoom100(files: Record<string, Uint8Array>): void {
         .replace(/\/?>$/, '')
         .replace(new RegExp(`\\szoomScale=${Q}[^${Q}]*${Q}`, 'g'), '')
         .replace(new RegExp(`\\szoomScaleNormal=${Q}[^${Q}]*${Q}`, 'g'), '');
-      const conZoom = `${attrs} zoomScale=${Q}100${Q} zoomScaleNormal=${Q}100${Q}`;
+      const conZoom = `${attrs} zoomScale=${Q}${percent}${Q} zoomScaleNormal=${Q}${percent}${Q}`;
       return `<sheetView${conZoom}${selfClosing ? '/>' : '>'}`;
     });
 
     if (withZoom !== xml) files[path] = strToU8(withZoom);
   }
 }
+
+/** Nivel de zoom con el que deben abrir la plantilla de novedades y el registro final. */
+const DEFAULT_ZOOM = 80;
 
 /** Quita `calcChain.xml` y las dos referencias que lo declaran. */
 function dropCalcChain(files: Record<string, Uint8Array>): void {

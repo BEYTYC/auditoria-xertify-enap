@@ -3,7 +3,7 @@
  * Panel de conexión con SharePoint: elige el adaptador y guarda sus credenciales.
  */
 
-import { Cloud, HelpCircle, Lock, LogOut, Server, ShieldCheck, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cloud, HelpCircle, Lock, LogOut, Server, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { effectiveMode } from '../config/appConfig';
@@ -65,6 +65,10 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const [draft, setDraft] = useState<SharePointConfig>(config);
   const [emailsDraft, setEmailsDraft] = useState<string>(authorizedEmails.join('\n'));
+  // Los campos técnicos (Client ID, URL del flujo, etc.) empiezan ocultos:
+  // la mayoría de las veces basta con ver qué método está activo, no editar
+  // sus credenciales una por una.
+  const [detallesAbiertos, setDetallesAbiertos] = useState(false);
 
   useEffect(() => setDraft(config), [config, open]);
   useEffect(() => setEmailsDraft(authorizedEmails.join('\n')), [authorizedEmails, open]);
@@ -182,7 +186,16 @@ export function SettingsDialog({
             </div>
           </fieldset>
 
-          {draft.mode === 'graph' && (
+          <button
+            type="button"
+            onClick={() => setDetallesAbiertos((value) => !value)}
+            className="flex items-center gap-1.5 text-[12px] font-medium text-navy-700 hover:text-navy-900"
+          >
+            {detallesAbiertos ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {detallesAbiertos ? 'Ocultar detalles de conexión' : 'Ver detalles de conexión'}
+          </button>
+
+          {detallesAbiertos && draft.mode === 'graph' && (
             <div className="grid gap-3 sm:grid-cols-2">
               <p className="text-[12px] leading-snug text-slate-600 sm:col-span-2">
                 Basta con la cuenta dueña del archivo y su ruta —«Estadística/Bases de
@@ -252,7 +265,7 @@ export function SettingsDialog({
             </div>
           )}
 
-          {draft.mode === 'webhook' && (
+          {detallesAbiertos && draft.mode === 'webhook' && (
             <div className="space-y-3">
               <Text
                 label="URL del flujo (HTTP request)"

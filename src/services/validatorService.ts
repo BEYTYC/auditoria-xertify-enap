@@ -29,12 +29,16 @@ import {
 import { XERTIFY_DOC_FORMATS, XERTIFY_GENDERS } from '../data/xertifyParameters';
 import { type CanonicalField, type StudentRow, type ValidationIssue } from '../types';
 import {
+  formatEnglishRange,
   formatSpanish,
   formatSpanishRange,
+  isCanonicalEnglishRange,
   isCanonicalSpanish,
   isCanonicalSpanishRange,
+  MONTHS_EN,
   parseAnyDate,
   parseDateRange,
+  parseEnglishDateRange,
   type ParsedDate,
 } from './dateService';
 import {
@@ -909,6 +913,98 @@ function validateSpanishDate(
   return { issues, parsed };
 }
 
+/**
+ * Igual que `validateSpanishDate`, pero para columnas cuyo encabezado
+ * original en la plantilla viene en inglés («startdate» / «start date»).
+ * El formato exigido es «August 31 to September 4, 2026»: sin el prefijo
+ * «between the», meses en mayúscula inicial y sin cero inicial en el día.
+ */
+function validateEnglishDate(
+  value: string,
+  field: CanonicalField,
+  bounds: { minYear?: number; maxYear?: number; allowRange?: boolean } = {},
+): { issues: ValidationIssue[]; parsed: ParsedDate | null } {
+  const text = collapseSpaces(value);
+  if (!text) return { issues: emptyIssue(field), parsed: null };
+
+  if (bounds.allowRange) {
+    const range = parseEnglishDateRange(text);
+    if (range) {
+      const issues: ValidationIssue[] = [];
+      if (!isCanonicalEnglishRange(text)) {
+        const canonical = formatEnglishRange(range);
+        issues.push(
+          makeIssue('FECHA.FORMATO_RANGO', field, `El rango debe escribirse «${canonical}».`, {
+            suggestion: canonical,
+          }),
+        );
+      }
+      return { issues, parsed: range.start };
+    }
+  }
+
+  const parsed = parseAnyDate(text);
+  if (!parsed) {
+    const ejemplo = bounds.allowRange
+      ? '«August 31 to September 4, 2026» o «February 1 to 5, 2025»'
+      : '«May 15, 2026»';
+    return {
+      issues: [
+        makeIssue(
+          'FECHA.ILEGIBLE',
+          field,
+          `«${text}» no es una fecha reconocible. Use ${ejemplo}.`,
+        ),
+      ],
+      parsed: null,
+    };
+  }
+
+  const issues: ValidationIssue[] = [];
+
+  if (parsed.ambiguous) {
+    issues.push(
+      makeIssue(
+        'FECHA.AMBIGUA',
+        field,
+        `«${text}» se interpretó como día/mes; confirme el orden.`,
+        { severity: 'warning', manualOnly: true },
+      ),
+    );
+  }
+  if (bounds.minYear && parsed.year < bounds.minYear) {
+    issues.push(
+      makeIssue('FECHA.FUERA_RANGO', field, `Anterior a ${bounds.minYear}.`, {
+        severity: 'warning',
+      }),
+    );
+  }
+  if (bounds.maxYear && parsed.year > bounds.maxYear) {
+    issues.push(
+      makeIssue('FECHA.FUERA_RANGO', field, `Posterior a ${bounds.maxYear}.`, {
+        severity: 'warning',
+      }),
+    );
+  }
+
+  const canonicalSingle = `${MONTHS_EN[parsed.month - 1]} ${parsed.day}, ${parsed.year}`;
+  if (text !== canonicalSingle) {
+    const leadingZero = /^[a-zA-Z]+\.?\s+0\d/.test(text);
+    issues.push(
+      makeIssue(
+        leadingZero ? 'FECHA.CERO_INICIAL' : 'FECHA.FORMATO',
+        field,
+        leadingZero
+          ? `El día no lleva cero inicial: «${canonicalSingle}».`
+          : `Debe escribirse «${canonicalSingle}».`,
+        { suggestion: canonicalSingle },
+      ),
+    );
+  }
+
+  return { issues, parsed };
+}
+
 /* ------------------------------------------------------------------ */
 /* Otros campos                                                         */
 /* ------------------------------------------------------------------ */
@@ -946,7 +1042,7 @@ function validatePhone(value: string, field: CanonicalField): ValidationIssue[] 
   // Aquí no se usa `collapseSpaces`: un espacio doble entre el indicativo y
   // el número también hay que señalarlo, no solo el que falta.
   const text = String(value ?? '').trim();
-  if (!text) return [];
+  if (!text) return emptyIssue(field);
 
   const digits = text.replace(/\D/g, '');
   if (digits.length < 7 || digits.length > 15) {
@@ -1032,7 +1128,7 @@ function validatePhone(value: string, field: CanonicalField): ValidationIssue[] 
 function validateGender(value: string): ValidationIssue[] {
   const field: CanonicalField = 'genero';
   const text = collapseSpaces(value);
-  if (!text) return [];
+  if (!text) return emptyIssue(field);
 
   if (XERTIFY_GENDERS.includes(text)) return [];
 
@@ -1129,6 +1225,11 @@ export type RowValues = Record<CanonicalField, string>;
 export function validateRow(
   values: RowValues,
   activeFields: Set<CanonicalField>,
+  // Campos cuya columna en la plantilla trae el encabezado en inglés
+  // («startdate» / «start date»), para exigirles el formato de fecha en
+  // inglés en vez del español. Vacío por defecto: no cambia nada para las
+  // plantillas con encabezado «fechainicio» en español.
+  englishDateFields: Set<CanonicalField> = new Set(),
 ): Partial<Record<CanonicalField, ValidationIssue[]>> {
   const out: Partial<Record<CanonicalField, ValidationIssue[]>> = {};
   const push = (field: CanonicalField, issues: ValidationIssue[]) => {
@@ -1155,20 +1256,18 @@ export function validateRow(
   }
   if (has('docformato')) push('docformato', validateDocFormat(values.docformato, values.tipodocumento));
 
-  // Ninguna de las dos es obligatoria: si viene se revisa, si no, no se
-  // reclama. `lugarexpi` es la que alimenta LUGAR EXPEDICION en la Base de
-  // Datos (lugarexpedicion queda como respaldo si esa viene vacía).
-  if (has('lugarexpedicion') && collapseSpaces(values.lugarexpedicion)) {
+  // `lugarexpi` es la que alimenta LUGAR EXPEDICION en la Base de Datos
+  // (lugarexpedicion queda como respaldo si esa viene vacía en la Base de
+  // Datos), pero para la auditoría ambas son obligatorias por igual.
+  if (has('lugarexpedicion')) {
     push('lugarexpedicion', validateCity(values.lugarexpedicion, 'lugarexpedicion'));
   }
-  if (has('lugarexpi') && collapseSpaces(values.lugarexpi)) {
+  if (has('lugarexpi')) {
     push('lugarexpi', validateCity(values.lugarexpi, 'lugarexpi'));
   }
 
   if (has('email')) push('email', validateEmail(values.email, 'email'));
-  if (has('email2') && collapseSpaces(values.email2)) {
-    push('email2', validateEmail(values.email2, 'email2'));
-  }
+  if (has('email2')) push('email2', validateEmail(values.email2, 'email2'));
   if (has('telefono')) push('telefono', validatePhone(values.telefono, 'telefono'));
   if (has('telefono2')) push('telefono2', validatePhone(values.telefono2, 'telefono2'));
   if (has('genero')) push('genero', validateGender(values.genero));
@@ -1195,11 +1294,10 @@ export function validateRow(
     );
   }
   if (has('fechainicio')) {
-    const result = validateSpanishDate(values.fechainicio, 'fechainicio', {
-      minYear: 1990,
-      maxYear: currentYear + 2,
-      allowRange: true,
-    });
+    const bounds = { minYear: 1990, maxYear: currentYear + 2, allowRange: true };
+    const result = englishDateFields.has('fechainicio')
+      ? validateEnglishDate(values.fechainicio, 'fechainicio', bounds)
+      : validateSpanishDate(values.fechainicio, 'fechainicio', bounds);
     push('fechainicio', result.issues);
     inicio = result.parsed;
   }
@@ -1229,9 +1327,8 @@ export function validateRow(
 
   if (has('titulo')) push('titulo', validateFreeText(values.titulo, 'titulo'));
   if (has('intensidad')) push('intensidad', validateNumber(values.intensidad, 'intensidad'));
-  if (has('direccion') && collapseSpaces(values.direccion)) {
-    push('direccion', validateFreeText(values.direccion, 'direccion'));
-  }
+  if (has('direccion')) push('direccion', validateFreeText(values.direccion, 'direccion'));
+  if (has('comentarios')) push('comentarios', validateFreeText(values.comentarios, 'comentarios'));
 
   if (has('li')) push('li', validateLedger(values.li, 'li'));
   if (has('fo')) push('fo', validateLedger(values.fo, 'fo'));

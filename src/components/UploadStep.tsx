@@ -4,10 +4,11 @@
  */
 
 import { motion } from 'framer-motion';
-import { AlertCircle, FileSpreadsheet, Loader2, UploadCloud } from 'lucide-react';
+import { AlertCircle, Download, FileSpreadsheet, Loader2, UploadCloud } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
 import { INSTITUCION } from '../data/brand';
+import { OFFICIAL_TEMPLATES } from '../data/officialTemplates';
 
 interface UploadStepProps {
   onFile: (file: File) => void;
@@ -119,6 +120,41 @@ export function UploadStep({ onFile, loading, error }: UploadStepProps) {
         </div>
       )}
 
+      {OFFICIAL_TEMPLATES.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.1 }}
+          className="card mt-5 px-5 py-5"
+        >
+          <h2 className="text-sm font-semibold text-navy-900">Plantillas oficiales</h2>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            El sistema solo acepta la plantilla oficial de Cursos de Extensión, sin modificar su
+            estructura. Descárguela aquí y diligéncienla sin quitar ni renombrar hojas o columnas.
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {OFFICIAL_TEMPLATES.map((plantilla) => (
+              <li key={plantilla.archivo}>
+                <a
+                  href={plantilla.archivo}
+                  download
+                  className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm transition hover:border-navy-300 hover:bg-navy-50"
+                >
+                  <span className="rounded-full bg-white p-2 text-navy-700 shadow-sm">
+                    <Download size={16} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-medium text-navy-900">{plantilla.nombre}</span>
+                    {plantilla.descripcion && (
+                      <span className="block text-xs text-slate-500">{plantilla.descripcion}</span>
+                    )}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+      )}
     </div>
   );
 }

@@ -104,8 +104,8 @@ export function useAuth() {
 
       if (!isAuthorizedRegistrar(rawEmail, loadAuthorizedRegistrars())) {
         setError(
-          'Este correo no está autorizado para registrar en el libro. Si cree que debería estarlo, ' +
-            'comuníquese con la Oficina de Estadística.',
+          'Este correo no está autorizado para registrar cursos de extensión. Si cree que debería ' +
+            'estarlo, comuníquese con la Oficina de Estadística.',
         );
         return;
       }

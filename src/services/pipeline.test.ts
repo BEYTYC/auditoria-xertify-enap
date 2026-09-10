@@ -14,6 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { strFromU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import * as XLSX from 'xlsx';
+
 import { autoFixAll, computeMetrics, revalidate } from './correctorService';
 import { buildDatabaseRows } from './databaseService';
 import { buildCorrectedWorkbook, readTemplate, type ParsedTemplate } from './excelService';
@@ -73,6 +75,46 @@ describe('lectura de la plantilla real', () => {
 
   it('no reporta columnas obligatorias faltantes', () => {
     expect(parsed.map.missingRequired).toEqual([]);
+  });
+});
+
+describe('blindaje de la plantilla oficial (Parameters!A1 = «Validación2»)', () => {
+  function bookWithParametersA1(valor: string | null): File {
+    const workbook = XLSX.utils.book_new();
+    const people = XLSX.utils.aoa_to_sheet([['nombres', 'apellidos']]);
+    XLSX.utils.book_append_sheet(workbook, people, 'People');
+    if (valor !== null) {
+      const parameters = XLSX.utils.aoa_to_sheet([[valor]]);
+      XLSX.utils.book_append_sheet(workbook, parameters, 'Parameters');
+    }
+    const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    return new File([bytes], 'plantilla-falsa.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+
+  it('rechaza un archivo sin la hoja Parameters', async () => {
+    await expect(readTemplate(bookWithParametersA1(null))).rejects.toThrow(
+      /no es la plantilla oficial/i,
+    );
+  });
+
+  it('rechaza un archivo con la hoja Parameters pero sin el texto esperado en A1', async () => {
+    await expect(readTemplate(bookWithParametersA1('cualquier cosa'))).rejects.toThrow(
+      /no es la plantilla oficial/i,
+    );
+  });
+
+  it('rechaza la marca vieja «Validación» (sin el 2): ya no es la plantilla oficial', async () => {
+    await expect(readTemplate(bookWithParametersA1('Validación'))).rejects.toThrow(
+      /no es la plantilla oficial/i,
+    );
+  });
+
+  it('acepta la plantilla real, que ya trae «Validación2» en Parameters!A1', async () => {
+    // No lanza: si esto fallara, la aserción de `beforeAll` del bloque de
+    // arriba tampoco habría podido cargar la fixture.
+    await expect(loadFixture()).resolves.toBeDefined();
   });
 });
 
@@ -250,11 +292,11 @@ describe('plantilla con las novedades marcadas (sin corregir nada)', () => {
     expect(comments).toContain('Tiene espacios sobrantes');
     expect(comments).toContain('Documento repetido en las filas');
 
-    // El formato de siempre se conserva: Aptos, `Parameters` oculta, zoom 100 %.
+    // El formato de siempre se conserva: Aptos, `Parameters` oculta, zoom 80 %.
     expect(strFromU8(files['xl/workbook.xml'])).toMatch(
       /<sheet\b(?=[^>]*\bname="Parameters")(?=[^>]*\bstate="hidden")[^>]*\/>/,
     );
-    expect(sheet).toContain('zoomScale="100"');
+    expect(sheet).toContain('zoomScale="80"');
     expect(strFromU8(files['xl/styles.xml'])).not.toContain('Calibri');
   });
 

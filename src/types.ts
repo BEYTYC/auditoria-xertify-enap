@@ -382,6 +382,12 @@ export interface LogEntry {
   curso: string;
   oficina: string;
   responsable: string;
+  /**
+   * Correo de quien registró el lote. Sirve para que, en la Bitácora, cada
+   * quien vea solo sus propios registros (la Oficina de Estadística sigue
+   * viendo todos). Los lotes registrados antes de este campo quedan vacíos.
+   */
+  correoResponsable?: string;
   totalGraduados: number;
   totalColombianos: number;
   totalExtranjeros: number;

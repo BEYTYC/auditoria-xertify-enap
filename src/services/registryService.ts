@@ -268,6 +268,7 @@ export async function registerBatch(
     curso: receipt.curso,
     oficina: receipt.oficina,
     responsable: receipt.responsable,
+    correoResponsable: request.metadata.correoResponsable,
     totalGraduados: receipt.stats.totalGraduados,
     totalColombianos: receipt.stats.totalColombianos,
     totalExtranjeros: receipt.stats.totalExtranjeros,

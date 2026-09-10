@@ -85,9 +85,10 @@ export function rowValues(row: StudentRow): RowValues {
 export function revalidate(
   rows: StudentRow[],
   activeFields: Set<CanonicalField>,
+  englishDateFields: Set<CanonicalField> = new Set(),
 ): StudentRow[] {
   const validated = rows.map((row) => {
-    const issuesByField = validateRow(rowValues(row), activeFields);
+    const issuesByField = validateRow(rowValues(row), activeFields, englishDateFields);
     const cells = { ...row.cells };
     for (const field of CANONICAL_FIELDS) {
       const cell = cells[field];
@@ -137,11 +138,12 @@ export function autoFixAll(
   rows: StudentRow[],
   activeFields: Set<CanonicalField>,
   options: { onlyFields?: CanonicalField[] } = {},
+  englishDateFields: Set<CanonicalField> = new Set(),
 ): AutoFixReport {
   const allowed = options.onlyFields ? new Set(options.onlyFields) : null;
   const byCode: Record<string, number> = {};
   let fixedCells = 0;
-  let current = revalidate(rows, activeFields);
+  let current = revalidate(rows, activeFields, englishDateFields);
 
   for (let pass = 0; pass < MAX_PASSES; pass += 1) {
     let changed = false;
@@ -175,7 +177,7 @@ export function autoFixAll(
     });
 
     if (!changed) break;
-    current = revalidate(current, activeFields);
+    current = revalidate(current, activeFields, englishDateFields);
   }
 
   // Cuenta final de celdas que difieren del original por autocorrección.
@@ -196,6 +198,7 @@ export function applyManualEdit(
   field: CanonicalField,
   value: string,
   activeFields: Set<CanonicalField>,
+  englishDateFields: Set<CanonicalField> = new Set(),
 ): StudentRow[] {
   const updated = rows.map((row) => {
     if (row.id !== rowId) return row;
@@ -213,7 +216,7 @@ export function applyManualEdit(
       },
     };
   });
-  return revalidate(updated, activeFields);
+  return revalidate(updated, activeFields, englishDateFields);
 }
 
 /** Revierte una celda a su valor original del archivo. */
@@ -222,6 +225,7 @@ export function revertCell(
   rowId: string,
   field: CanonicalField,
   activeFields: Set<CanonicalField>,
+  englishDateFields: Set<CanonicalField> = new Set(),
 ): StudentRow[] {
   const updated = rows.map((row) => {
     if (row.id !== rowId) return row;
@@ -232,7 +236,7 @@ export function revertCell(
       cells: { ...row.cells, [field]: { ...cell, value: cell.original, fixedBy: 'none' as const } },
     };
   });
-  return revalidate(updated, activeFields);
+  return revalidate(updated, activeFields, englishDateFields);
 }
 
 /** Elimina una fila del lote (p. ej. una fila en blanco al final del archivo). */
@@ -240,10 +244,12 @@ export function removeRow(
   rows: StudentRow[],
   rowId: string,
   activeFields: Set<CanonicalField>,
+  englishDateFields: Set<CanonicalField> = new Set(),
 ): StudentRow[] {
   return revalidate(
     rows.filter((row) => row.id !== rowId),
     activeFields,
+    englishDateFields,
   );
 }
 

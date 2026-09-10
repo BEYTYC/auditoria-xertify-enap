@@ -62,16 +62,18 @@ function values(overrides: Partial<Record<CanonicalField, string>>) {
 function codesFor(
   overrides: Partial<Record<CanonicalField, string>>,
   field: CanonicalField,
+  englishFields: Set<CanonicalField> = new Set(),
 ): string[] {
-  const issues = validateRow(values(overrides), ALL_FIELDS)[field] ?? [];
+  const issues = validateRow(values(overrides), ALL_FIELDS, englishFields)[field] ?? [];
   return issues.map((issue) => issue.code);
 }
 
 function suggestionFor(
   overrides: Partial<Record<CanonicalField, string>>,
   field: CanonicalField,
+  englishFields: Set<CanonicalField> = new Set(),
 ): string | undefined {
-  const issues = validateRow(values(overrides), ALL_FIELDS)[field] ?? [];
+  const issues = validateRow(values(overrides), ALL_FIELDS, englishFields)[field] ?? [];
   return issues.find((issue) => issue.suggestion !== undefined)?.suggestion;
 }
 
@@ -905,23 +907,90 @@ describe('rango de fechas del curso', () => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/* Campos que dejaron de exigirse                                      */
-/* ------------------------------------------------------------------ */
+describe('FECHA INICIO en inglés («startdate» / «start date»)', () => {
+  const EN = new Set<CanonicalField>(['fechainicio']);
 
-describe('campos opcionales', () => {
-  it('el lugar de expedición vacío ya no es error', () => {
-    expect(codesFor({ lugarexpedicion: '' }, 'lugarexpedicion')).toEqual([]);
+  it('sin el encabezado en inglés, el mismo texto sigue validándose en español', () => {
+    // Sin marcar la columna como inglesa, «August 31 to September 4, 2026»
+    // no es una fecha española reconocible: debe seguir dando ilegible.
+    expect(codesFor({ fechainicio: 'August 31 to September 4, 2026' }, 'fechainicio')).toContain(
+      'FECHA.ILEGIBLE',
+    );
   });
 
-  it('pero si viene, se sigue revisando', () => {
+  it('rechaza el prefijo «between the» y quita el cero inicial', () => {
+    const texto = 'between the august 31 to september 04, 2026';
+    // «between the» normaliza el mes en minúscula, pero antes de comparar el
+    // parser solo necesita reconocer el mes por su nombre, sin importar caja.
+    const codes = codesFor({ fechainicio: texto }, 'fechainicio', EN);
+    expect(codes).not.toContain('FECHA.ILEGIBLE');
+    expect(codes).toContain('FECHA.FORMATO_RANGO');
+    expect(suggestionFor({ fechainicio: texto }, 'fechainicio', EN)).toBe(
+      'August 31 to September 4, 2026',
+    );
+  });
+
+  it('acepta el rango ya canónico sin quejarse: distinto mes', () => {
+    expect(codesFor({ fechainicio: 'August 31 to September 4, 2026' }, 'fechainicio', EN)).toEqual(
+      [],
+    );
+  });
+
+  it('acepta el rango ya canónico sin quejarse: mismo mes', () => {
+    expect(codesFor({ fechainicio: 'February 1 to 5, 2025' }, 'fechainicio', EN)).toEqual([]);
+  });
+
+  it('distinto año: escribe ambos extremos completos', () => {
+    const texto = 'December 30, 2025 to January 4, 2026';
+    expect(codesFor({ fechainicio: texto }, 'fechainicio', EN)).toEqual([]);
+  });
+
+  it('una sola fecha (sin rango) también se exige en formato inglés sin ordinal', () => {
+    const codes = codesFor({ fechainicio: 'May 1st, 2026' }, 'fechainicio', EN);
+    expect(codes).toContain('FECHA.FORMATO');
+    expect(suggestionFor({ fechainicio: 'May 1st, 2026' }, 'fechainicio', EN)).toBe(
+      'May 1, 2026',
+    );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Obligatoriedad: todo es obligatorio salvo FECHANACIMIENTO2 y el      */
+/* registro (li/fo/numre, que la propia app rellena al registrar).     */
+/* ------------------------------------------------------------------ */
+
+describe('solo FECHANACIMIENTO2 y el registro (li/fo/numre) quedan opcionales', () => {
+  it('FECHANACIMIENTO2 vacío no es error', () => {
+    expect(codesFor({ fechanacimiento2: '' }, 'fechanacimiento2')).toEqual([]);
+  });
+
+  it('li, fo y numre vacíos no son error: los rellena la app al registrar', () => {
+    expect(codesFor({ li: '' }, 'li')).toEqual([]);
+    expect(codesFor({ fo: '' }, 'fo')).toEqual([]);
+    expect(codesFor({ numre: '' }, 'numre')).toEqual([]);
+  });
+
+  it('el lugar de expedición vacío ahora sí es obligatorio', () => {
+    expect(codesFor({ lugarexpedicion: '' }, 'lugarexpedicion')).toContain('CAMPO.VACIO');
+  });
+
+  it('si viene, se sigue revisando igual que siempre', () => {
     expect(suggestionFor({ lugarexpedicion: 'BOGOTA' }, 'lugarexpedicion')).toBe('Bogotá D.C.');
   });
 
-  it('«lugarexpi» también se revisa (tildes y ortografía) antes de alimentar la base', () => {
-    expect(codesFor({ lugarexpi: '' }, 'lugarexpi')).toEqual([]);
+  it('«lugarexpi» también es obligatorio, y se revisa (tildes y ortografía) antes de alimentar la base', () => {
+    expect(codesFor({ lugarexpi: '' }, 'lugarexpi')).toContain('CAMPO.VACIO');
     expect(suggestionFor({ lugarexpi: 'MEXICO' }, 'lugarexpi')).toBe('México');
     expect(codesFor({ lugarexpi: 'NA' }, 'lugarexpi')).toContain('LUGAR.NO_APLICA');
+  });
+
+  it('teléfono, teléfono alterno, correo alterno, género, dirección y comentarios ahora son obligatorios', () => {
+    expect(codesFor({ telefono: '' }, 'telefono')).toContain('CAMPO.VACIO');
+    expect(codesFor({ telefono2: '' }, 'telefono2')).toContain('CAMPO.VACIO');
+    expect(codesFor({ email2: '' }, 'email2')).toContain('CAMPO.VACIO');
+    expect(codesFor({ genero: '' }, 'genero')).toContain('CAMPO.VACIO');
+    expect(codesFor({ direccion: '' }, 'direccion')).toContain('CAMPO.VACIO');
+    expect(codesFor({ comentarios: '' }, 'comentarios')).toContain('CAMPO.VACIO');
   });
 });
 

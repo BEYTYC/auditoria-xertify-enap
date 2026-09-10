@@ -56,6 +56,7 @@ import type { TableInfo } from '../services/sharepointService';
 import type {
   BatchMetadata,
   CanonicalField,
+  ColumnMapping,
   LedgerPosition,
   LogEntry,
   RegistrationResult,
@@ -81,6 +82,23 @@ function emptyMetadata(): BatchMetadata {
     intensidad: '',
     archivoOriginal: '',
   };
+}
+
+/**
+ * De las columnas mapeadas a `fechainicio`, cuáles traían el encabezado
+ * literalmente en inglés («startdate» / «start date») en la plantilla
+ * original. Esas son las únicas a las que se les exige el formato de fecha
+ * en inglés; el encabezado en español, «fechainicio», sigue validándose
+ * igual que siempre.
+ */
+function computeEnglishDateFields(mappings: ColumnMapping[]): Set<CanonicalField> {
+  const fields = new Set<CanonicalField>();
+  for (const mapping of mappings) {
+    if (mapping.field !== 'fechainicio') continue;
+    const header = mapping.header.trim().toLowerCase();
+    if (header === 'startdate' || header === 'start date') fields.add('fechainicio');
+  }
+  return fields;
 }
 
 export interface AuditState {
@@ -131,6 +149,15 @@ export function useAudit() {
     [parsed],
   );
 
+  // Columnas cuyo encabezado original en la plantilla vino en inglés
+  // («startdate» / «start date»): a esas se les exige el formato de fecha en
+  // inglés en vez del español, sin tocar el comportamiento cuando el
+  // encabezado es el de siempre, «fechainicio».
+  const englishDateFields = useMemo(
+    () => computeEnglishDateFields(parsed?.map.mappings ?? []),
+    [parsed],
+  );
+
   const metrics = useMemo(() => computeMetrics(rows), [rows]);
   const clean = isBatchClean(metrics);
 
@@ -145,7 +172,11 @@ export function useAudit() {
 
     try {
       const template = await readTemplate(file);
-      const validated = revalidate(template.rows, template.activeFields);
+      const validated = revalidate(
+        template.rows,
+        template.activeFields,
+        computeEnglishDateFields(template.map.mappings),
+      );
 
       // La oficina se propone con el curso más frecuente del lote.
       const titles = validated
@@ -191,16 +222,20 @@ export function useAudit() {
 
   const dropRow = useCallback(
     (rowId: string) => {
-      setRows((current) => removeRow(current, rowId, activeFields));
+      setRows((current) => removeRow(current, rowId, activeFields, englishDateFields));
     },
-    [activeFields],
+    [activeFields, englishDateFields],
   );
 
   const remap = useCallback(
     (columnIndex: number, field: CanonicalField | null) => {
       if (!parsed) return;
       const next = remapColumn(parsed, columnIndex, field);
-      const validated = revalidate(next.rows, next.activeFields);
+      const validated = revalidate(
+        next.rows,
+        next.activeFields,
+        computeEnglishDateFields(next.map.mappings),
+      );
       setParsed({ ...next, rows: validated });
       setRows(validated);
     },

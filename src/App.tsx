@@ -227,7 +227,21 @@ export default function App() {
 
               {audit.step === 'history' && (
                 <HistoryStep
-                  log={audit.log}
+                  log={
+                    // La Oficina de Estadística (modo admin) ve todo, para
+                    // supervisar. Cualquier otra persona ve solo los lotes que
+                    // registró ella misma: la bitácora vive en el navegador,
+                    // así que si varias personas comparten el mismo equipo,
+                    // antes se veían los registros de todas entre sí.
+                    audit.admin
+                      ? audit.log
+                      : audit.log.filter(
+                          (entry) =>
+                            auth.session?.email &&
+                            entry.correoResponsable?.trim().toLowerCase() ===
+                              auth.session.email.trim().toLowerCase(),
+                        )
+                  }
                   admin={audit.admin}
                   adminMensaje={audit.adminMensaje}
                   loading={audit.loading}
