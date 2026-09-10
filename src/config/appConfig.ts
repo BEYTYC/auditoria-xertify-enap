@@ -145,16 +145,43 @@ export function isWebhookReady(config: SharePointConfig): boolean {
 const AUTHORIZED_REGISTRARS_KEY = 'auditor-certificados.authorized-registrars.v1';
 
 /**
+ * Correos precargados la primera vez que se abre la app en un navegador
+ * (antes de que Administración guarde su propia lista). Beyty pidió dejar
+ * estos ya listos para que ella solo tenga que agregar el resto desde el
+ * panel de Administración.
+ */
+const DEFAULT_AUTHORIZED_REGISTRARS: string[] = [
+  'jestadisticaplen@enap.edu.co',
+  'cien@enap.edu.co',
+  'ccomi@enap.edu.co',
+  'administrativocidiam@enap.edu.co',
+  'jcley@enap.edu.co',
+  'cursosextensionfcn@enap.edu.co',
+  'posfam@enap.edu.co',
+  'cursosextensionfacof@enap.edu.co',
+  'sea@enap.edu.co',
+  'maestriaingnaval@enap.edu.co',
+  'jatfim@enap.edu.co',
+];
+
+/**
  * Lista de correos que pueden llegar hasta el registro real en el libro.
  * Se edita desde Administración, sin tocar código ni Vercel.
  *
- * Lista vacía = sin restricción adicional: cualquier correo institucional
- * (@enap.edu.co) puede registrar, igual que antes de activar este control.
+ * La primera vez que se abre en un navegador (sin nada guardado todavía) se
+ * precarga con `DEFAULT_AUTHORIZED_REGISTRARS` y se guarda de una vez, para
+ * que Administración ya la muestre lista y solo falte agregar el resto.
+ * Una vez que existe algo guardado —aunque se borre por completo a
+ * propósito—, esa lista guardada manda: lista vacía guardada intencionalmente
+ * sigue significando «sin restricción adicional».
  */
 export function loadAuthorizedRegistrars(): string[] {
   try {
     const stored = window.localStorage.getItem(AUTHORIZED_REGISTRARS_KEY);
-    if (!stored) return [];
+    if (!stored) {
+      saveAuthorizedRegistrars(DEFAULT_AUTHORIZED_REGISTRARS);
+      return [...DEFAULT_AUTHORIZED_REGISTRARS];
+    }
     const parsed = JSON.parse(stored) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((value): value is string => typeof value === 'string');

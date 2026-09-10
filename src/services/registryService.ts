@@ -296,10 +296,21 @@ export async function registerBatch(
     );
   }
 
-  const { receipt, databaseRows } = previewRegistration(request, now);
+  let { receipt, databaseRows } = previewRegistration(request, now);
   const adapter: SharePointAdapter = createAdapter(request.config);
 
-  const baseLog: Omit<LogEntry, 'outcome' | 'mode' | 'syncedToSharePoint'> = {
+  const baseLog: Omit<
+    LogEntry,
+    | 'outcome'
+    | 'mode'
+    | 'syncedToSharePoint'
+    | 'libro'
+    | 'folioInicial'
+    | 'registroInicial'
+    | 'folioFinal'
+    | 'registroFinal'
+    | 'rows'
+  > = {
     idRegistro: receipt.idRegistro,
     timestampIso: receipt.timestampIso,
     fechaHoraLegible: receipt.fechaHoraLegible,
@@ -314,19 +325,34 @@ export async function registerBatch(
     erroresAuto: receipt.stats.erroresAuto,
     erroresManuales: receipt.stats.erroresManuales,
     estado: receipt.estado,
-    libro: receipt.allocation.start.libro,
-    folioInicial: receipt.allocation.start.folio,
-    registroInicial: receipt.allocation.start.registro,
-    folioFinal: receipt.allocation.end.folio,
-    registroFinal: receipt.allocation.end.registro,
-    rows: databaseRows,
   };
 
   try {
     const outcome = await adapter.append(databaseRows);
 
+    // Si el adaptador devolvió la numeración real —releída del libro justo
+    // antes de escribir, con turno (ver api/registrar.js)—, reemplaza la que
+    // este navegador había calculado con lo último que sabía. Sin esto, dos
+    // personas registrando cada una desde su propio equipo podían calcular el
+    // mismo folio/registro y el libro terminaba con un mismo número repetido
+    // para dos lotes distintos.
+    if (outcome.allocation) {
+      receipt = {
+        ...receipt,
+        allocation: outcome.allocation,
+        referenciaAuditoria: `${receipt.idRegistro} · ${describeAllocation(outcome.allocation)}`,
+      };
+      databaseRows = buildDatabaseRows(request.rows, request.metadata, outcome.allocation);
+    }
+
     appendLog({
       ...baseLog,
+      libro: receipt.allocation.start.libro,
+      folioInicial: receipt.allocation.start.folio,
+      registroInicial: receipt.allocation.start.registro,
+      folioFinal: receipt.allocation.end.folio,
+      registroFinal: receipt.allocation.end.registro,
+      rows: databaseRows,
       outcome: 'success',
       mode: adapter.mode,
       syncedToSharePoint: adapter.mode !== 'mock',

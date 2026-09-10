@@ -19,12 +19,14 @@ import {
 import {
   type DatabaseRow,
   type EmailContext,
+  type LedgerAllocation,
   type LedgerPosition,
   type SharePointConfig,
   type SharePointMode,
 } from '../types';
 import { effectiveColumns, toGraphMatrix } from './databaseService';
 import { keysFromDatabaseRows, studentKey } from './duplicateService';
+import { allocate } from './numberingService';
 
 /** Cuántas filas finales de la tabla se leen para detectar lotes repetidos. */
 const RECENT_ROWS = 600;
@@ -54,6 +56,14 @@ export interface AppendOutcome {
   rowsSent: number;
   workbookUrl?: string;
   message: string;
+  /**
+   * Numeración de verdad, cuando el adaptador la conoce con certeza (ver
+   * `WebhookAdapter.append`): `api/registrar.js` relee la última fila del
+   * libro justo antes de escribir, con turno, para que dos registros casi
+   * simultáneos no calculen el mismo folio/registro. Si viene, reemplaza a la
+   * numeración que el navegador había calculado por su cuenta.
+   */
+  allocation?: LedgerAllocation;
 }
 
 export interface NotifyOutcome {
@@ -668,9 +678,35 @@ export class WebhookAdapter implements SharePointAdapter {
       );
     }
 
+    // Este modo no sabe de antemano cuál es la última fila del libro (por
+    // eso `inspect()`, arriba, devuelve `lastPosition: null`): cada
+    // navegador calculaba la numeración con lo último que él mismo sabía, y
+    // si dos personas registraban sin haber leído antes el mismo estado, los
+    // dos podían calcular el mismo folio/registro. `api/registrar.js` (nuestro
+    // reemplazo de Power Automate) ahora relee la última fila real justo
+    // antes de escribir, con turno, y la devuelve aquí para corregir lo que
+    // ya se había calculado. Un flujo de Power Automate real, en cambio, no
+    // devuelve este campo, y todo sigue funcionando como antes.
+    let allocation: LedgerAllocation | undefined;
+    try {
+      const body = (await response.json()) as {
+        numeracion?: { previoPosicion?: LedgerPosition; previoConsecutivo?: number };
+      };
+      const numeracion = body.numeracion;
+      if (
+        numeracion?.previoPosicion &&
+        Number.isFinite(numeracion.previoConsecutivo)
+      ) {
+        allocation = allocate(numeracion.previoPosicion, numeracion.previoConsecutivo!, rows.length);
+      }
+    } catch {
+      // Cuerpo vacío o no-JSON: se sigue con la numeración calculada aquí.
+    }
+
     return {
       rowsSent: rows.length,
       message: `${rows.length} filas enviadas al flujo de Power Automate.`,
+      allocation,
     };
   }
 

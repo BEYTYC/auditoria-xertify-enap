@@ -142,8 +142,141 @@ async function resolverArchivo() {
   }
 
   const data = await resp.json();
-  cachedFileRef = { driveId: data.parentReference.driveId, itemId: data.id };
+  cachedFileRef = {
+    driveId: data.parentReference.driveId,
+    itemId: data.id,
+    // Carpeta donde vive el archivo: aquí se crea el archivo de turno (ver
+    // adquirirBloqueo) para que dos registros casi simultáneos no calculen el
+    // mismo folio/registro.
+    parentId: data.parentReference.id,
+  };
   return cachedFileRef;
+}
+
+/* -------------------------------------------------------------------- */
+/* Numeración institucional del libro (LIBRO / FOLIO / REGISTRO / N)      */
+/* -------------------------------------------------------------------- */
+//
+// Antes, cada navegador calculaba esta numeración por su cuenta a partir de
+// lo último que él mismo había leído (o, si nunca lo había leído, de un
+// valor de arranque fijo en el código). Cuando dos personas registraban
+// —incluso sin coincidir en el segundo exacto: bastaba con que cada una
+// abriera la app en su propio equipo sin haber registrado antes ahí—, las
+// dos partían del mismo punto y el libro terminaba con el mismo folio/
+// registro repetido para dos lotes distintos (el caso reportado: el 11477
+// libro 3 folio 99 registro 55 salió dos veces, con personas distintas).
+//
+// La solución: quien de verdad sabe cuál es la última fila es el Excel
+// mismo, así que ahora es este servidor —justo antes de escribir, y con un
+// turno para que nadie más escriba al mismo tiempo— el que relee la última
+// fila y asigna los números. El navegador sigue mandando su propio cálculo
+// (para mostrar el comprobante mientras espera la respuesta), pero el que
+// manda es el que se calcula aquí; se le devuelve al navegador para que
+// corrija el comprobante, la bitácora y la plantilla adjunta si hacía falta.
+
+const MAX_FOLIO = 99;
+const MAX_REGISTRO = 99;
+
+/** Posición de arranque si el libro está vacío o no se pudo leer. */
+const POSICION_INICIAL = { libro: 3, folio: 99, registro: 54 };
+const CONSECUTIVO_INICIAL = 11476;
+
+function siguientePosicion(posicion) {
+  if (posicion.registro < MAX_REGISTRO) {
+    return { ...posicion, registro: posicion.registro + 1 };
+  }
+  if (posicion.folio < MAX_FOLIO) {
+    return { libro: posicion.libro, folio: posicion.folio + 1, registro: 1 };
+  }
+  return { libro: posicion.libro + 1, folio: 1, registro: 1 };
+}
+
+/** Relee la última fila real de la tabla: libro/folio/registro/consecutivo. */
+async function leerUltimaPosicion(driveId, itemId) {
+  const tabla = process.env.GRAPH_TABLE_ID || 'Tabla3';
+  const hoja = process.env.GRAPH_WORKSHEET || 'Libro No. 2';
+  const base = `/drives/${driveId}/items/${itemId}/workbook`;
+
+  const rangeResp = await graphFetch(
+    `${base}/tables/${encodeURIComponent(tabla)}/dataBodyRange?$select=rowCount,address`,
+  );
+  if (!rangeResp.ok) return null;
+
+  const range = await rangeResp.json();
+  const ultimaFila = Number(String(range.address || '').match(/(\d+)$/)?.[1] ?? 0);
+  if (!(ultimaFila > 1)) return null;
+
+  const cellsResp = await graphFetch(
+    `${base}/worksheets('${encodeURIComponent(hoja)}')` +
+      `/range(address='A${ultimaFila}:D${ultimaFila}')?$select=values`,
+  );
+  if (!cellsResp.ok) return null;
+
+  const cells = await cellsResp.json();
+  const [n, libro, folio, registro] = (cells.values?.[0] ?? []).map(Number);
+  if (![n, libro, folio, registro].every(Number.isFinite)) return null;
+
+  return { consecutivo: n, posicion: { libro, folio, registro } };
+}
+
+/* -------------------------------------------------------------------- */
+/* Turno: evita que dos registros casi simultáneos se pisen                */
+/* -------------------------------------------------------------------- */
+//
+// Microsoft Graph no ofrece un "bloqueo" de verdad para Excel, así que se usa
+// un truco conocido: crear un archivo de 0 bytes con
+// `@microsoft.graph.conflictBehavior: "fail"` es una operación atómica —si
+// ya existe, Graph responde 409 en vez de crear un duplicado—. Mientras ese
+// archivo exista, nadie más puede "tomar el turno"; al terminar de escribir,
+// se borra para que el siguiente pueda entrar.
+
+const NOMBRE_TURNO = '.registro-en-curso.lock';
+
+async function adquirirTurno(driveId, parentId) {
+  const intentosMax = 25;
+  for (let intento = 0; intento < intentosMax; intento += 1) {
+    const resp = await graphFetch(`/drives/${driveId}/items/${parentId}/children`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: NOMBRE_TURNO,
+        file: {},
+        '@microsoft.graph.conflictBehavior': 'fail',
+      }),
+    });
+    if (resp.ok) {
+      const item = await resp.json();
+      return item.id;
+    }
+    if (resp.status !== 409) {
+      const error = new Error('No se pudo tomar el turno para registrar en el libro.');
+      error.status = 502;
+      error.detail = await resp.text();
+      throw error;
+    }
+    // Otro registro tiene el turno: espera un poco (con variación, para que
+    // dos solicitudes que llegaron juntas no reintenten en el mismo instante)
+    // y vuelve a intentar.
+    await new Promise((resolve) => setTimeout(resolve, 300 + Math.random() * 500));
+  }
+
+  const error = new Error(
+    'Hay varias personas registrando lotes al mismo tiempo y no se pudo tomar el turno. ' +
+      'Espere unos segundos y vuelva a intentarlo.',
+  );
+  error.status = 503;
+  throw error;
+}
+
+async function liberarTurno(driveId, lockItemId) {
+  if (!lockItemId) return;
+  try {
+    await graphFetch(`/drives/${driveId}/items/${lockItemId}`, { method: 'DELETE' });
+  } catch {
+    // Si el borrado falla, el siguiente registro esperará un poco más de la
+    // cuenta la próxima vez que lea este archivo con conflictBehavior=fail,
+    // pero no debe verse como si el registro que sí se acaba de completar
+    // hubiera fallado.
+  }
 }
 
 async function escribirLote(payload) {
@@ -161,21 +294,61 @@ async function escribirLote(payload) {
     throw error;
   }
 
-  const { driveId, itemId } = await resolverArchivo();
+  const { driveId, itemId, parentId } = await resolverArchivo();
 
-  const resp = await graphFetch(
-    `/drives/${driveId}/items/${itemId}/workbook/tables/${encodeURIComponent(tabla)}/rows/add`,
-    { method: 'POST', body: JSON.stringify({ values: valores }) },
-  );
+  // Turno: mientras este lote no termine de escribirse, nadie más puede
+  // entrar a leer-y-escribir la numeración (ver comentario arriba de
+  // `adquirirTurno`). Así dos registros casi simultáneos no calculan el
+  // mismo folio/registro.
+  const lockItemId = await adquirirTurno(driveId, parentId);
 
-  if (!resp.ok) {
-    const error = new Error('Excel Online rechazó la escritura del lote.');
-    error.status = 502;
-    error.detail = await resp.text();
-    throw error;
+  try {
+    // La numeración que mandó el navegador (columnas 0-3 de cada fila: N,
+    // LIBRO, FOLIO, REGISTRO) es solo su mejor cálculo con lo último que él
+    // sabía; aquí se descarta y se vuelve a calcular con la última fila real
+    // del libro, leída con el turno ya tomado.
+    const ultima = await leerUltimaPosicion(driveId, itemId);
+    const posicionPrevia = ultima?.posicion ?? POSICION_INICIAL;
+    const consecutivoPrevio = ultima?.consecutivo ?? CONSECUTIVO_INICIAL;
+
+    let cursor = posicionPrevia;
+    const asignados = valores.map((fila, indice) => {
+      cursor = siguientePosicion(cursor);
+      const consecutivo = consecutivoPrevio + indice + 1;
+      const nuevaFila = fila.slice();
+      nuevaFila[0] = consecutivo;
+      nuevaFila[1] = cursor.libro;
+      nuevaFila[2] = cursor.folio;
+      nuevaFila[3] = cursor.registro;
+      return nuevaFila;
+    });
+
+    const resp = await graphFetch(
+      `/drives/${driveId}/items/${itemId}/workbook/tables/${encodeURIComponent(tabla)}/rows/add`,
+      { method: 'POST', body: JSON.stringify({ values: asignados }) },
+    );
+
+    if (!resp.ok) {
+      const error = new Error('Excel Online rechazó la escritura del lote.');
+      error.status = 502;
+      error.detail = await resp.text();
+      throw error;
+    }
+
+    return {
+      rowsSent: asignados.length,
+      // Con esto la app recalcula, del lado del navegador, el mismo rango
+      // exacto que se acaba de escribir aquí (misma fórmula, mismo punto de
+      // partida) y corrige el comprobante, la bitácora y la plantilla
+      // adjunta si habían quedado con la numeración vieja.
+      numeracion: {
+        previoPosicion: posicionPrevia,
+        previoConsecutivo: consecutivoPrevio,
+      },
+    };
+  } finally {
+    await liberarTurno(driveId, lockItemId);
   }
-
-  return { rowsSent: valores.length };
 }
 
 async function enviarCorreo(payload) {
