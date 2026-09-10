@@ -955,11 +955,14 @@ describe('FECHA INICIO en inglés («startdate» / «start date»)', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Obligatoriedad: todo es obligatorio salvo FECHANACIMIENTO2 y el      */
-/* registro (li/fo/numre, que la propia app rellena al registrar).     */
+/* Obligatoriedad: además de FECHANACIMIENTO2 y el registro (li/fo/numre, */
+/* que la propia app rellena), LUGAREXPEDICION, FECHAEXPEDICION, GENERO,  */
+/* DIRECCION, EMAIL2, TELEFONO2, COMENTARIOS y LUGAREXPI también quedan   */
+/* opcionales. Solo TELEFONO sigue siendo obligatorio entre los que se    */
+/* habían tocado.                                                         */
 /* ------------------------------------------------------------------ */
 
-describe('solo FECHANACIMIENTO2 y el registro (li/fo/numre) quedan opcionales', () => {
+describe('obligatoriedad de los campos institucionales', () => {
   it('FECHANACIMIENTO2 vacío no es error', () => {
     expect(codesFor({ fechanacimiento2: '' }, 'fechanacimiento2')).toEqual([]);
   });
@@ -970,27 +973,25 @@ describe('solo FECHANACIMIENTO2 y el registro (li/fo/numre) quedan opcionales', 
     expect(codesFor({ numre: '' }, 'numre')).toEqual([]);
   });
 
-  it('el lugar de expedición vacío ahora sí es obligatorio', () => {
-    expect(codesFor({ lugarexpedicion: '' }, 'lugarexpedicion')).toContain('CAMPO.VACIO');
+  it('lugar y fecha de expedición, género, dirección, correo alterno, teléfono alterno, comentarios y lugarexpi vuelven a ser opcionales', () => {
+    expect(codesFor({ lugarexpedicion: '' }, 'lugarexpedicion')).toEqual([]);
+    expect(codesFor({ fechaexpedicion: '' }, 'fechaexpedicion')).toEqual([]);
+    expect(codesFor({ genero: '' }, 'genero')).toEqual([]);
+    expect(codesFor({ direccion: '' }, 'direccion')).toEqual([]);
+    expect(codesFor({ email2: '' }, 'email2')).toEqual([]);
+    expect(codesFor({ telefono2: '' }, 'telefono2')).toEqual([]);
+    expect(codesFor({ comentarios: '' }, 'comentarios')).toEqual([]);
+    expect(codesFor({ lugarexpi: '' }, 'lugarexpi')).toEqual([]);
   });
 
-  it('si viene, se sigue revisando igual que siempre', () => {
+  it('si vienen diligenciados, se siguen revisando igual que siempre', () => {
     expect(suggestionFor({ lugarexpedicion: 'BOGOTA' }, 'lugarexpedicion')).toBe('Bogotá D.C.');
-  });
-
-  it('«lugarexpi» también es obligatorio, y se revisa (tildes y ortografía) antes de alimentar la base', () => {
-    expect(codesFor({ lugarexpi: '' }, 'lugarexpi')).toContain('CAMPO.VACIO');
     expect(suggestionFor({ lugarexpi: 'MEXICO' }, 'lugarexpi')).toBe('México');
     expect(codesFor({ lugarexpi: 'NA' }, 'lugarexpi')).toContain('LUGAR.NO_APLICA');
   });
 
-  it('teléfono, teléfono alterno, correo alterno, género, dirección y comentarios ahora son obligatorios', () => {
+  it('el teléfono principal sigue siendo obligatorio', () => {
     expect(codesFor({ telefono: '' }, 'telefono')).toContain('CAMPO.VACIO');
-    expect(codesFor({ telefono2: '' }, 'telefono2')).toContain('CAMPO.VACIO');
-    expect(codesFor({ email2: '' }, 'email2')).toContain('CAMPO.VACIO');
-    expect(codesFor({ genero: '' }, 'genero')).toContain('CAMPO.VACIO');
-    expect(codesFor({ direccion: '' }, 'direccion')).toContain('CAMPO.VACIO');
-    expect(codesFor({ comentarios: '' }, 'comentarios')).toContain('CAMPO.VACIO');
   });
 });
 

@@ -9,6 +9,26 @@
 import { ChevronDown, Download } from 'lucide-react';
 
 import { OFFICIAL_TEMPLATES } from '../data/officialTemplates';
+import { downloadBlob } from '../services/excelService';
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/**
+ * Baja la plantilla como archivo de verdad, en vez de dejar que el navegador
+ * decida qué hacer con el enlace. Un `<a href download>` apuntando a un
+ * estático a veces lo abre en una pestaña en línea en lugar de guardarlo
+ * —depende del navegador y de cómo lo sirva el hosting—; trayendo los bytes
+ * con `fetch` y soltándolos como blob se fuerza siempre el guardado, igual
+ * que hacen las demás descargas de la app (`downloadAnnotated`, `downloadCorrected`).
+ */
+async function descargarPlantilla(plantilla: { archivo: string; nombre: string }) {
+  const respuesta = await fetch(plantilla.archivo);
+  if (!respuesta.ok) return;
+  const bytes = await respuesta.arrayBuffer();
+  const blob = new Blob([bytes], { type: XLSX_MIME });
+  const nombreArchivo = plantilla.archivo.split('/').pop() ?? `${plantilla.nombre}.xlsx`;
+  downloadBlob(blob, nombreArchivo);
+}
 
 export function TemplatesMenu() {
   if (OFFICIAL_TEMPLATES.length === 0) return null;
@@ -37,20 +57,21 @@ export function TemplatesMenu() {
         ].join(' ')}
       >
         <p className="px-2 pb-1.5 pt-1 text-xs text-slate-500">
-          El sistema solo acepta la plantilla oficial, sin modificar su estructura.
+          Este archivo no corresponde a la plantilla oficial de Cursos de Extensión de la Oficina
+          de Estadística. Descargue la plantilla oficial en el botón Descarga de plantillas.
         </p>
         <ul className="flex flex-col gap-1">
           {OFFICIAL_TEMPLATES.map((plantilla) => (
             <li key={plantilla.archivo}>
-              <a
-                href={plantilla.archivo}
-                download
+              <button
+                type="button"
+                onClick={() => void descargarPlantilla(plantilla)}
                 title={plantilla.descripcion}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-navy-900 transition hover:bg-navy-50"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-navy-900 transition hover:bg-navy-50"
               >
                 <Download size={14} className="shrink-0 text-navy-700" />
                 <span className="min-w-0 leading-snug">{plantilla.nombre}</span>
-              </a>
+              </button>
             </li>
           ))}
         </ul>

@@ -481,10 +481,25 @@ export function annotateTemplate(
   const files = unzipSync(new Uint8Array(original));
   const sheetPath = findSheetPath(files, options.sheetName);
 
+  // El archivo que sube la facultad puede venir de una descarga previa de
+  // esta misma función —una ronda anterior de novedades que ya corrigió a
+  // medias—. Sin este aseo, cada ronda apilaba su propio juego de
+  // comentarios/dibujo heredado encima del anterior: dos `<legacyDrawing>`
+  // en la misma hoja, relaciones repetidas… es justo lo que hace que Excel
+  // avise «hemos encontrado un problema con el contenido». Se limpia todo
+  // rastro de la ronda anterior antes de calcular la actual.
+  stripComments(files, sheetPath);
+
   const columnOf = new Map<string, number>();
   for (const mapping of options.mappings) {
     if (mapping.field) columnOf.set(mapping.field, mapping.index);
   }
+
+  // Misma razón: si una celda quedó amarilla en una ronda anterior y ya se
+  // corrigió, no debe seguir amarilla solo porque el archivo subido traía
+  // ese relleno guardado. Se repone el estilo de fábrica de la columna en
+  // cada celda auditada antes de decidir qué sí tiene novedad ahora.
+  resetAuditedStyles(files, sheetPath, rows, columnOf);
 
   const issues: IssueMap = new Map();
   for (const row of rows) {
@@ -519,6 +534,52 @@ export function annotateTemplate(
   setZoomLevel(files, DEFAULT_ZOOM);
 
   return new Blob([zipSync(files)], { type: XLSX_MIME });
+}
+
+/**
+ * Repone el estilo de fábrica —el que declara la propia columna en
+ * `<cols>`— en cada celda auditada de cada fila. Se corre antes de decidir
+ * qué celdas tienen novedad en la ronda actual, para que un amarillo de una
+ * ronda anterior (que quedó guardado en el archivo que la facultad volvió a
+ * subir) se siga viendo aunque la celda ya esté corregida.
+ */
+function resetAuditedStyles(
+  files: Record<string, Uint8Array>,
+  sheetPath: string,
+  rows: StudentRow[],
+  columnOf: Map<string, number>,
+): void {
+  const columnas = [...columnOf.values()];
+  if (!columnas.length) return;
+
+  const refs = new Set<string>();
+  for (const row of rows) {
+    for (const column of columnas) refs.add(`${columnLetter(column)}${row.excelRow}`);
+  }
+  if (!refs.size) return;
+
+  const xml = strFromU8(files[sheetPath]);
+  const openMatch = /<sheetData\b[^>]*>/.exec(xml);
+  if (!openMatch) return;
+  const start = openMatch.index + openMatch[0].length;
+  const end = xml.indexOf('</sheetData>', start);
+  if (end === -1) return;
+
+  const sheetData = xml.slice(start, end);
+  const porColumna = columnStyles(xml);
+
+  const rewritten = sheetData.replace(CELL_PATTERN, (cellXml) => {
+    const ref = /\sr="([A-Z]+\d+)"/.exec(cellXml)?.[1];
+    if (!ref || !refs.has(ref)) return cellXml;
+    const parsed = parseRef(ref);
+    const estilo = parsed ? porColumna.get(parsed.column) : undefined;
+    if (estilo === undefined) return cellXml;
+    return restyleCell(cellXml, estilo);
+  });
+
+  if (rewritten !== sheetData) {
+    files[sheetPath] = strToU8(xml.slice(0, start) + rewritten + xml.slice(end));
+  }
 }
 
 /** Campos cuya columna debe leerse siempre alineada a la izquierda. */

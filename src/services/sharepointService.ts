@@ -126,11 +126,30 @@ async function fetchWithRetry(
   );
 }
 
-/** Lee el mensaje de error que devuelve Microsoft Graph. */
+/**
+ * Lee el mensaje de error de la respuesta fallida. Reconoce dos formas:
+ *
+ * - La nativa de Microsoft Graph: `{ error: { code, message } }`.
+ * - La de `api/registrar.js` (el reemplazo gratuito de Power Automate):
+ *   `{ error: "texto", detail: "texto" }`, con `error` como cadena, no como
+ *   objeto. Sin esta segunda forma, `body.error.code`/`body.error.message`
+ *   salían `undefined` sobre una cadena y el detalle que de verdad explica
+ *   la falla —el texto de `detail`, que trae el error real de Graph— se
+ *   perdía, dejando solo un inútil «502:» en pantalla.
+ */
 async function describeHttpError(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as { error?: { code?: string; message?: string } };
-    if (body?.error) return `${body.error.code ?? response.status}: ${body.error.message ?? ''}`;
+    const body = (await response.json()) as {
+      error?: { code?: string; message?: string } | string;
+      detail?: string;
+    };
+
+    if (body?.error && typeof body.error === 'object') {
+      return `${body.error.code ?? response.status}: ${body.error.message ?? ''}`;
+    }
+    if (typeof body?.error === 'string' && body.error) {
+      return [body.error, body.detail].filter(Boolean).join(' — ');
+    }
   } catch {
     // El cuerpo no era JSON.
   }
