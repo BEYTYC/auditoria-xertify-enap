@@ -191,10 +191,30 @@ function siguientePosicion(posicion) {
   return { libro: posicion.libro + 1, folio: 1, registro: 1 };
 }
 
+/**
+ * Tabla y hoja reales según el destino que ya calculó el front-end
+ * (WebhookAdapter.append, en sharepointService.ts): "tabla2" es Tabla2 /
+ * «Cursos de Ascenso» (lotes de Cursos de Ley, 21 columnas); cualquier otro
+ * valor — incluido "tabla3" o si no viene el campo, por compatibilidad con
+ * llamadas antiguas — es Tabla3 / «Libro No. 2» (20 columnas). Antes esta
+ * función siempre usaba Tabla3/Libro No. 2 sin importar el destino, así que
+ * un lote de Cursos de Ley terminaba con sus 21 columnas escritas contra
+ * Tabla3 (que solo tiene 20) y Excel Online lo rechazaba con "El número de
+ * filas o columnas de la matriz de entrada no coincide con el tamaño o las
+ * dimensiones del rango."
+ */
+function tablaYHojaDe(payload) {
+  if (payload.destino === 'tabla2') {
+    return { tabla: 'Tabla2', hoja: 'Cursos de Ascenso' };
+  }
+  return {
+    tabla: process.env.GRAPH_TABLE_ID || 'Tabla3',
+    hoja: process.env.GRAPH_WORKSHEET || 'Libro No. 2',
+  };
+}
+
 /** Relee la última fila real de la tabla: libro/folio/registro/consecutivo. */
-async function leerUltimaPosicion(driveId, itemId) {
-  const tabla = process.env.GRAPH_TABLE_ID || 'Tabla3';
-  const hoja = process.env.GRAPH_WORKSHEET || 'Libro No. 2';
+async function leerUltimaPosicion(driveId, itemId, tabla, hoja) {
   const base = `/drives/${driveId}/items/${itemId}/workbook`;
 
   const rangeResp = await graphFetch(
@@ -280,7 +300,7 @@ async function liberarTurno(driveId, lockItemId) {
 }
 
 async function escribirLote(payload) {
-  const tabla = process.env.GRAPH_TABLE_ID || 'Tabla3';
+  const { tabla, hoja } = tablaYHojaDe(payload);
 
   const filas = Array.isArray(payload.filas) ? payload.filas : [];
   const columnas = Array.isArray(payload.columnas) ? payload.columnas : [];
@@ -307,7 +327,7 @@ async function escribirLote(payload) {
     // LIBRO, FOLIO, REGISTRO) es solo su mejor cálculo con lo último que él
     // sabía; aquí se descarta y se vuelve a calcular con la última fila real
     // del libro, leída con el turno ya tomado.
-    const ultima = await leerUltimaPosicion(driveId, itemId);
+    const ultima = await leerUltimaPosicion(driveId, itemId, tabla, hoja);
     const posicionPrevia = ultima?.posicion ?? POSICION_INICIAL;
     const consecutivoPrevio = ultima?.consecutivo ?? CONSECUTIVO_INICIAL;
 
