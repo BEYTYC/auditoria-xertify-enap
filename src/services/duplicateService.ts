@@ -14,7 +14,7 @@
  *      registro, y que sí ven lo que registró otra persona en otro equipo.
  */
 
-import type { DatabaseRow, LogEntry, StudentRow } from '../types';
+import type { AscensoRow, DatabaseRow, LogEntry, StudentRow } from '../types';
 import { normalizeKey } from './textUtils';
 
 /** Clave de un graduado dentro de un curso: `curso∷documento`. */
@@ -34,8 +34,12 @@ export function batchKeys(rows: StudentRow[], cursoDelLote: string): string[] {
   return out;
 }
 
-/** Claves de las filas ya escritas en la base. */
-export function keysFromDatabaseRows(rows: DatabaseRow[]): string[] {
+/**
+ * Claves de las filas ya escritas en la base. Sirve tanto para Tabla3 como
+ * para Tabla2 («Cursos de Ascenso»): las dos traen `NOMBRE DEL CURSO` y
+ * `DOCUMENTO DE IDENTIDAD`, que es lo único que hace falta aquí.
+ */
+export function keysFromDatabaseRows(rows: (DatabaseRow | AscensoRow)[]): string[] {
   return rows
     .map((row) =>
       studentKey(

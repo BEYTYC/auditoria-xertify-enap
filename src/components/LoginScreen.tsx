@@ -25,6 +25,9 @@ interface LoginScreenProps {
   onVerifyCode: (code: string) => void;
   onResendCode: () => void;
   onChangeEmail: () => void;
+  /** El mismo acceso se usa antes de registrar y antes de ver la bitácora;
+   *  el texto cambia según para qué se está pidiendo el correo. */
+  proposito?: 'registrar' | 'bitacora';
 }
 
 export function LoginScreen({
@@ -37,9 +40,16 @@ export function LoginScreen({
   onVerifyCode,
   onResendCode,
   onChangeEmail,
+  proposito = 'registrar',
 }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+
+  const titulo = proposito === 'bitacora' ? 'Acceso a la bitácora' : 'Acceso para registrar';
+  const subtitulo =
+    proposito === 'bitacora'
+      ? 'Confirme su correo institucional autorizado para ver la bitácora de registros.'
+      : 'Confirme su correo institucional autorizado para continuar con el registro oficial.';
 
   return (
     <div className="flex w-full items-center justify-center px-4">
@@ -48,10 +58,8 @@ export function LoginScreen({
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-700">
             <ShieldCheck size={24} />
           </span>
-          <h2 className="mt-3 text-lg font-semibold text-navy-900">Acceso para registrar</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Confirme su correo institucional autorizado para continuar con el registro oficial.
-          </p>
+          <h2 className="mt-3 text-lg font-semibold text-navy-900">{titulo}</h2>
+          <p className="mt-1 text-sm text-slate-600">{subtitulo}</p>
         </header>
 
           <div className="card px-6 py-6">

@@ -41,6 +41,7 @@ import {
 } from '../services/duplicateService';
 import { closeAdmin, isAdminAccount, openAdmin, readAdmin } from '../services/adminService';
 import { suggestOffice } from '../services/officeService';
+import { esLoteDeCursosDeLey } from '../services/databaseService';
 import {
   annulEntry,
   applyLedger,
@@ -150,6 +151,15 @@ export function useAudit() {
     [parsed],
   );
 
+  // La plantilla de Cursos de Ley es la única que trae `numerocurso`: su sola
+  // presencia entre las columnas mapeadas basta para saber que este lote va
+  // a Tabla2 («Cursos de Ascenso») y no a Tabla3 (Cursos de Extensión, la de
+  // siempre). Ver `esLoteDeCursosDeLey` en databaseService.ts.
+  const destino = useMemo(
+    () => (esLoteDeCursosDeLey(activeFields) ? 'tabla2' : 'tabla3'),
+    [activeFields],
+  );
+
   // Columnas cuyo encabezado original en la plantilla vino en inglés
   // («startdate» / «start date»): a esas se les exige el formato de fecha en
   // inglés en vez del español, sin tocar el comportamiento cuando el
@@ -251,7 +261,7 @@ export function useAudit() {
     setLoading('Consultando la Base de Datos…');
     setError(null);
     try {
-      const info = await inspectDestination(config);
+      const info = await inspectDestination(config, destino);
       setTableInfo(info);
       if (info.lastPosition) setLastPosition(info.lastPosition);
       if (info.lastConsecutivo !== null) setLastConsecutivo(info.lastConsecutivo);
@@ -262,7 +272,7 @@ export function useAudit() {
     } finally {
       setLoading(null);
     }
-  }, [config]);
+  }, [config, destino]);
 
   const updateConfig = useCallback((next: SharePointConfig) => {
     setConfig(next);
@@ -282,8 +292,9 @@ export function useAudit() {
       config,
       lastPosition,
       lastConsecutivo,
+      destino,
     });
-  }, [rows, metadata, config, lastPosition, lastConsecutivo]);
+  }, [rows, metadata, config, lastPosition, lastConsecutivo, destino]);
 
   /**
    * Un lote que ya se asentó no se vuelve a asentar: quedaría dos veces en el
@@ -319,7 +330,7 @@ export function useAudit() {
     setLoading('Consultando la Base de Datos…');
     let info = tableInfo;
     try {
-      info = await inspectDestination(config);
+      info = await inspectDestination(config, destino);
       setTableInfo(info);
       if (info.lastPosition) setLastPosition(info.lastPosition);
       if (info.lastConsecutivo !== null) setLastConsecutivo(info.lastConsecutivo);
@@ -346,6 +357,7 @@ export function useAudit() {
         rows,
         metadata,
         config,
+        destino,
         lastPosition: info?.lastPosition ?? lastPosition,
         lastConsecutivo: info?.lastConsecutivo ?? lastConsecutivo,
         // Con esto el correo de confirmación puede llevar adjunta la misma
@@ -404,7 +416,7 @@ export function useAudit() {
     } finally {
       setLoading(null);
     }
-  }, [clean, rows, metadata, config, lastPosition, lastConsecutivo, tableInfo, log, parsed]);
+  }, [clean, rows, metadata, config, lastPosition, lastConsecutivo, tableInfo, log, parsed, destino]);
 
   /* -------------------------------------------------------------- */
   /* Administración                                                  */

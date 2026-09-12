@@ -108,7 +108,7 @@ function Confirmation({
 
   return (
     <div className="mx-auto w-full max-w-[1120px] space-y-5">
-      <header>
+      <header className="text-center">
         <h2 className="text-xl font-semibold text-navy-900">Confirmación del registro</h2>
       </header>
 
@@ -263,11 +263,11 @@ function Receipt({
               </span>
             </div>
 
-            <div className="px-6 py-4">
-              <h3 className="mb-2 text-sm font-semibold text-navy-900">
+            <div className="px-6 py-6">
+              <h3 className="mb-4 text-sm font-semibold text-navy-900">
                 Datos registrados en Oficina de Estadística
               </h3>
-              <dl className="grid gap-x-10 gap-y-3 text-sm sm:grid-cols-3">
+              <dl className="grid gap-x-10 gap-y-4 text-sm sm:grid-cols-3">
                 <Detail label="Fecha y hora" value={receipt.fechaHoraLegible} />
                 <Detail label="Curso" value={toDisplayTitle(receipt.curso)} />
                 <Detail label="Facultad u oficina" value={officeLabel(receipt.oficina)} />

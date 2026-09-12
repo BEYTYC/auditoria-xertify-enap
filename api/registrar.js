@@ -414,7 +414,30 @@ async function enviarCorreo(payload) {
   }
 }
 
+/**
+ * CORS: esta función se llama desde el dominio del PORTAL (o desde el que
+ * sea, embebido en un iframe) — nunca desde el mismo dominio que
+ * `auditoria-xertify-enap.vercel.app` — así que sin estos encabezados el
+ * navegador bloquea la respuesta antes de que la app la vea y todo parece
+ * "Failed to fetch" aunque la función haya funcionado bien. `*` es seguro
+ * aquí porque el único secreto real es la propia `API_KEY`, que igual se
+ * exige por encabezado y nunca queda visible en el navegador de nadie más.
+ */
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+}
+
 export default async function handler(req, res) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') {
+    // Preflight: el navegador pregunta antes del POST real si tiene permiso.
+    res.status(204).end();
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Método no permitido: use POST.' });
     return;

@@ -8,6 +8,7 @@
  */
 
 import {
+  type AscensoRow,
   type BatchMetadata,
   type BatchReceipt,
   type BatchStats,
@@ -16,11 +17,12 @@ import {
   type LedgerPosition,
   type LogEntry,
   type RegistrationResult,
+  type RegistroDestino,
   type SharePointConfig,
   type StudentRow,
 } from '../types';
 import { computeMetrics, isBatchClean } from './correctorService';
-import { buildDatabaseRows } from './databaseService';
+import { buildAscensoRows, buildDatabaseRows } from './databaseService';
 import { blobToBase64, correctedFileName, fileDateFromIso } from './excelService';
 import { allocate, buildBatchId, describeAllocation } from './numberingService';
 import {
@@ -134,6 +136,15 @@ export interface RegistrationRequest {
   rows: StudentRow[];
   metadata: BatchMetadata;
   config: SharePointConfig;
+  /**
+   * A qué libro va el lote. Lo decide quien llama (ver
+   * `esLoteDeCursosDeLey` en databaseService.ts, a partir de las columnas
+   * que trae la plantilla auditada): `tabla3` para Cursos de Extensión (el
+   * de siempre), `tabla2` para los lotes de Cursos de Ley, que van a
+   * «Cursos de Ascenso». Por compatibilidad con el código existente, si no
+   * se indica se asume `tabla3`.
+   */
+  destino?: RegistroDestino;
   /** Última posición ocupada en el libro. */
   lastPosition: LedgerPosition;
   /** Último consecutivo `N` de Tabla3. */
@@ -178,7 +189,7 @@ export function applyLedger(
 
 export interface RegistrationPreview {
   receipt: BatchReceipt;
-  databaseRows: DatabaseRow[];
+  databaseRows: DatabaseRow[] | AscensoRow[];
   resumenNumeracion: string;
 }
 
@@ -204,7 +215,7 @@ export function previewRegistration(
   request: RegistrationRequest,
   now = new Date(),
 ): RegistrationPreview {
-  const { rows, metadata, lastPosition, lastConsecutivo } = request;
+  const { rows, metadata, lastPosition, lastConsecutivo, destino = 'tabla3' } = request;
 
   const allocation = allocate(lastPosition, lastConsecutivo, rows.length);
   const stats = buildStats(rows);
@@ -227,7 +238,10 @@ export function previewRegistration(
     referenciaAuditoria: `${idRegistro} · ${describeAllocation(allocation)}`,
   };
 
-  const databaseRows = buildDatabaseRows(rows, metadata, allocation);
+  const databaseRows =
+    destino === 'tabla2'
+      ? buildAscensoRows(rows, metadata, allocation)
+      : buildDatabaseRows(rows, metadata, allocation);
 
   return { receipt, databaseRows, resumenNumeracion: describeAllocation(allocation) };
 }
@@ -237,9 +251,12 @@ export function previewRegistration(
 /* ------------------------------------------------------------------ */
 
 /** Lee la estructura de la tabla destino y la última posición del libro. */
-export async function inspectDestination(config: SharePointConfig): Promise<TableInfo> {
+export async function inspectDestination(
+  config: SharePointConfig,
+  destino: RegistroDestino = 'tabla3',
+): Promise<TableInfo> {
   const adapter = createAdapter(config);
-  return adapter.inspect();
+  return adapter.inspect(destino);
 }
 
 /**
@@ -260,7 +277,7 @@ export async function annulEntry(
   }
 
   const adapter = createAdapter(config);
-  const borradas = await adapter.deleteByConsecutive(consecutivos);
+  const borradas = await adapter.deleteByConsecutive(consecutivos, entry.destino);
 
   const log = readLog().map((item) =>
     item.idRegistro === entry.idRegistro
@@ -328,7 +345,7 @@ export async function registerBatch(
   };
 
   try {
-    const outcome = await adapter.append(databaseRows);
+    const outcome = await adapter.append(databaseRows, request.destino);
 
     // Si el adaptador devolvió la numeración real —releída del libro justo
     // antes de escribir, con turno (ver api/registrar.js)—, reemplaza la que
@@ -342,7 +359,10 @@ export async function registerBatch(
         allocation: outcome.allocation,
         referenciaAuditoria: `${receipt.idRegistro} · ${describeAllocation(outcome.allocation)}`,
       };
-      databaseRows = buildDatabaseRows(request.rows, request.metadata, outcome.allocation);
+      databaseRows =
+        request.destino === 'tabla2'
+          ? buildAscensoRows(request.rows, request.metadata, outcome.allocation)
+          : buildDatabaseRows(request.rows, request.metadata, outcome.allocation);
     }
 
     appendLog({
@@ -352,6 +372,7 @@ export async function registerBatch(
       registroInicial: receipt.allocation.start.registro,
       folioFinal: receipt.allocation.end.folio,
       registroFinal: receipt.allocation.end.registro,
+      destino: request.destino ?? 'tabla3',
       rows: databaseRows,
       outcome: 'success',
       mode: adapter.mode,

@@ -66,7 +66,21 @@ function esCorreoInstitucional(email) {
   return /^[^\s@]+@enap\.edu\.co$/i.test(String(email || '').trim());
 }
 
+/** Ver el comentario equivalente en api/registrar.js — misma razón, mismo arreglo. */
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+}
+
 export default async function handler(req, res) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Método no permitido: use POST.' });
     return;

@@ -31,8 +31,12 @@
 
 import {
   DB_COLUMNS,
+  DB_COLUMNS_ASCENSO,
+  type AscensoRow,
   type BatchMetadata,
+  type CanonicalField,
   type DbColumn,
+  type DbColumnAscenso,
   type DatabaseRow,
   type LedgerAllocation,
   type StudentRow,
@@ -218,6 +222,97 @@ export function effectiveColumns(): DbColumn[] {
 /** Convierte las filas al arreglo bidimensional que espera Microsoft Graph. */
 export function toGraphMatrix(rows: DatabaseRow[]): (string | number | null)[][] {
   const columns = effectiveColumns();
+  return rows.map((row) => columns.map((column) => row[column] ?? null));
+}
+
+/* ------------------------------------------------------------------ */
+/* Tabla2 («Cursos de Ascenso»): destino de los lotes de Cursos de Ley   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `true` si el lote se auditó con la plantilla de Cursos de Ley: es la única
+ * que trae la columna `numerocurso`, así que su sola presencia entre las
+ * columnas mapeadas basta para saberlo, sin depender del nombre de archivo
+ * (que el responsable puede haber cambiado al guardarlo).
+ */
+export function esLoteDeCursosDeLey(activeFields: Set<CanonicalField>): boolean {
+  return activeFields.has('numerocurso');
+}
+
+/**
+ * Arma las filas de Tabla2 («Cursos de Ascenso») para todo el lote. Mismo
+ * contrato que `buildDatabaseRows`, pero con las columnas y la numeración
+ * propias de ese libro (ver `DB_COLUMNS_ASCENSO` en types.ts).
+ */
+export function buildAscensoRows(
+  rows: StudentRow[],
+  metadata: BatchMetadata,
+  allocation: LedgerAllocation,
+): AscensoRow[] {
+  return rows.map((row, index) => {
+    const position = allocation.positions[index];
+    const consecutivo = allocation.consecutivos[index];
+    const cell = (field: keyof typeof row.cells) => row.cells[field]?.value ?? '';
+
+    const numeroRaw = normalizeNumericCell(cell('numerodocumento')).trim();
+    const soloDigitos = cleanNationalId(numeroRaw);
+    const esNumerico = soloDigitos.length > 0 && /^[\d.]+$/.test(numeroRaw);
+    const numero = esNumerico ? Number(soloDigitos) : numeroRaw;
+
+    const curso = collapseSpaces(cell('titulo') || metadata.curso);
+    const fechaRegistro = cell('fechaemite') || metadata.fechaRegistro;
+
+    const inicioTexto = cell('fechainicio') || metadata.fechaInicio;
+    const rango = parseDateRange(inicioTexto);
+
+    const apellidos = toDatabasePersonName(cell('apellidos'));
+    const nombres = toDatabasePersonName(cell('nombres'));
+
+    // El promedio se guarda con 3 decimales, como en el resto del libro
+    // (el autocorrector ya deja sugerido ese formato si el valor difiere).
+    const promedioRaw = collapseSpaces(cell('promedio')).replace(',', '.');
+    const promedio = Number(promedioRaw);
+
+    const fechaRegParsed = parseAnyDate(fechaRegistro);
+
+    const built: AscensoRow = {
+      N: consecutivo,
+      LIBRO: position.libro,
+      FOLIO: position.folio,
+      'REG.': position.registro,
+      APELLIDOS: apellidos,
+      NOMBRES: nombres,
+      'APELLIDOS Y NOMBRES': collapseSpaces(`${apellidos} ${nombres}`),
+      'DOCUMENTO DE IDENTIDAD': numero,
+      'LUGAR EXPEDICION': toDatabasePlaceName(cell('lugarexpi') || cell('lugarexpedicion')),
+      PROMEDIO: Number.isFinite(promedio) ? promedio : null,
+      'PUESTO GENERAL': collapseSpaces(cell('puesto')) || null,
+      'NOMBRE DEL CURSO': toDatabaseText(curso),
+      'NUMERO DE CURSO': collapseSpaces(cell('numerocurso')) || null,
+      MODALIDAD: collapseSpaces(cell('modalidad')) || null,
+      TIPO: collapseSpaces(cell('tipo')) || null,
+      'FECHA INICIO': rango ? toExcelSerial(rango.start) : dateCell(inicioTexto),
+      'FECHA FINALIZACION': rango ? toExcelSerial(rango.end) : null,
+      'FECHA DE REGISTRO': dateCell(fechaRegistro),
+      AÑO: fechaRegParsed?.year ?? null,
+      // Mismo criterio que la columna PERIODO de Tabla3: primer semestre si
+      // el mes de FECHA DE REGISTRO es anterior a julio, segundo si no.
+      SEM: fechaRegParsed ? (fechaRegParsed.month < 7 ? 1 : 2) : null,
+      'OFICINA RESPONSABLE': metadata.oficina,
+    };
+
+    return built;
+  });
+}
+
+/** Columnas efectivas de la inserción en Tabla2, en orden. */
+export function effectiveColumnsAscenso(): DbColumnAscenso[] {
+  return [...DB_COLUMNS_ASCENSO];
+}
+
+/** Convierte las filas de Tabla2 al arreglo bidimensional que espera Graph. */
+export function toGraphMatrixAscenso(rows: AscensoRow[]): (string | number | null)[][] {
+  const columns = effectiveColumnsAscenso();
   return rows.map((row) => columns.map((column) => row[column] ?? null));
 }
 

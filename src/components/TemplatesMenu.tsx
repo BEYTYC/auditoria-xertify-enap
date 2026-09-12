@@ -30,18 +30,31 @@ async function descargarPlantilla(plantilla: { archivo: string; nombre: string }
   downloadBlob(blob, nombreArchivo);
 }
 
-export function TemplatesMenu() {
+interface TemplatesMenuProps {
+  /**
+   * En el paso 1 incrustado no hay franja de pasos donde apoyarse: el botón
+   * flota solo, arriba a la derecha, junto a Reiniciar/Volver al Inicio, así
+   * que lleva su propio fondo y borde en vez del estilo discreto de la franja.
+   */
+  floating?: boolean;
+}
+
+export function TemplatesMenu({ floating = false }: TemplatesMenuProps) {
   if (OFFICIAL_TEMPLATES.length === 0) return null;
 
   return (
     <div className="group relative">
       <button
         type="button"
-        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-navy-900 focus-visible:bg-slate-100 focus-visible:outline-none"
+        className={
+          floating
+            ? 'flex items-center gap-1.5 rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-semibold text-navy-700 shadow-md transition hover:border-navy-300 hover:bg-navy-50 hover:text-navy-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-400'
+            : 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-navy-900 focus-visible:bg-slate-100 focus-visible:outline-none'
+        }
       >
-        <Download size={15} />
-        Descarga de plantillas
-        <ChevronDown size={14} className="transition group-hover:rotate-180" />
+        <Download size={floating ? 13 : 15} />
+        <span className={floating ? 'hidden sm:inline' : undefined}>Descarga de plantillas</span>
+        <ChevronDown size={floating ? 12 : 14} className="transition group-hover:rotate-180" />
       </button>
 
       {/* Puente invisible: evita que el menú se cierre en el hueco entre el

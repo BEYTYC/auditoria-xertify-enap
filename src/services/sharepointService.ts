@@ -17,16 +17,27 @@ import {
   isWebhookReady,
 } from '../config/appConfig';
 import {
+  type AscensoRow,
   type DatabaseRow,
   type EmailContext,
   type LedgerAllocation,
   type LedgerPosition,
+  type RegistroDestino,
   type SharePointConfig,
   type SharePointMode,
 } from '../types';
-import { effectiveColumns, toGraphMatrix } from './databaseService';
+import {
+  effectiveColumns,
+  effectiveColumnsAscenso,
+  toGraphMatrix,
+  toGraphMatrixAscenso,
+} from './databaseService';
 import { keysFromDatabaseRows, studentKey } from './duplicateService';
 import { allocate } from './numberingService';
+
+/** Nombre fijo de la tabla y hoja de «Cursos de Ascenso» (Tabla2). */
+const TABLA_ASCENSO = 'Tabla2';
+const HOJA_ASCENSO = 'Cursos de Ascenso';
 
 /** Cuántas filas finales de la tabla se leen para detectar lotes repetidos. */
 const RECENT_ROWS = 600;
@@ -74,15 +85,15 @@ export interface NotifyOutcome {
 export interface SharePointAdapter {
   readonly mode: SharePointMode;
   /** Comprueba credenciales y lee la estructura de la tabla. */
-  inspect(): Promise<TableInfo>;
+  inspect(destino?: RegistroDestino): Promise<TableInfo>;
   /** Anexa las filas al final de la tabla. */
-  append(rows: DatabaseRow[]): Promise<AppendOutcome>;
+  append(rows: (DatabaseRow | AscensoRow)[], destino?: RegistroDestino): Promise<AppendOutcome>;
   /**
    * Quita del libro las filas cuyo consecutivo `N` se indique. Es la única
    * forma de deshacer un registro equivocado, y solo la Oficina de Estadística
    * puede pedirla.
    */
-  deleteByConsecutive(consecutivos: number[]): Promise<number>;
+  deleteByConsecutive(consecutivos: number[], destino?: RegistroDestino): Promise<number>;
   /**
    * Avisa del registro ya hecho al responsable. Nunca lanza: un correo que no
    * salió no debe hacer parecer que el registro en la Base de Datos falló.
@@ -346,12 +357,12 @@ export class GraphAdapter implements SharePointAdapter {
     enviadas: number,
     headers: HeadersInit,
     base: string,
+    tabla: string,
   ): Promise<string | null> {
     if (!enviadas) return null;
     try {
-      const graph = this.config.graph!;
       const response = await fetchWithRetry(
-        `${base}/tables/${encodeURIComponent(graph.tableId)}/columns?$select=name`,
+        `${base}/tables/${encodeURIComponent(tabla)}/columns?$select=name`,
         { method: 'GET', headers },
       );
       if (!response.ok) return null;
@@ -367,19 +378,28 @@ export class GraphAdapter implements SharePointAdapter {
     }
   }
 
-  async inspect(): Promise<TableInfo> {
+  /** Nombre de tabla y hoja según el destino: Tabla3/Cursos de Extensión por defecto, Tabla2/Cursos de Ascenso para los lotes de Ley. */
+  private tablaYHoja(destino: RegistroDestino): { tabla: string; hoja: string } {
     const graph = this.config.graph!;
+    if (destino === 'tabla2') {
+      return { tabla: TABLA_ASCENSO, hoja: HOJA_ASCENSO };
+    }
+    return { tabla: graph.tableId, hoja: graph.worksheetName ?? 'Libro No. 2' };
+  }
+
+  async inspect(destino: RegistroDestino = 'tabla3'): Promise<TableInfo> {
     const headers = await this.headers();
     const base = await this.resolveBase();
+    const { tabla, hoja: sheet } = this.tablaYHoja(destino);
 
     // 1. Columnas de la tabla.
     const columnsResponse = await fetchWithRetry(
-      `${base}/tables/${encodeURIComponent(graph.tableId)}/columns?$select=name`,
+      `${base}/tables/${encodeURIComponent(tabla)}/columns?$select=name`,
       { method: 'GET', headers },
     );
     if (!columnsResponse.ok) {
       throw new SharePointError(
-        `No se pudo leer la tabla «${graph.tableId}». Verifique el ID del archivo y de la tabla.`,
+        `No se pudo leer la tabla «${tabla}». Verifique el ID del archivo y de la tabla.`,
         await describeHttpError(columnsResponse),
         columnsResponse.status,
       );
@@ -394,13 +414,12 @@ export class GraphAdapter implements SharePointAdapter {
 
     try {
       const rangeResponse = await fetchWithRetry(
-        `${base}/tables/${encodeURIComponent(graph.tableId)}/dataBodyRange?$select=rowCount,address`,
+        `${base}/tables/${encodeURIComponent(tabla)}/dataBodyRange?$select=rowCount,address`,
         { method: 'GET', headers },
       );
 
       if (rangeResponse.ok) {
         const range = (await rangeResponse.json()) as { rowCount: number; address: string };
-        const sheet = graph.worksheetName ?? 'Libro No. 2';
         // `address` viene como `Libro No. 2!A2:R11336`; se toma la última fila.
         const lastRow = Number(range.address.match(/(\d+)$/)?.[1] ?? 0);
         if (lastRow > 1) {
@@ -448,12 +467,15 @@ export class GraphAdapter implements SharePointAdapter {
    * cada uno, y se borran de atrás hacia adelante: si se borrara de adelante
    * hacia atrás, cada borrado correría las posiciones de los siguientes.
    */
-  async deleteByConsecutive(consecutivos: number[]): Promise<number> {
+  async deleteByConsecutive(
+    consecutivos: number[],
+    destino: RegistroDestino = 'tabla3',
+  ): Promise<number> {
     if (!consecutivos.length) return 0;
-    const graph = this.config.graph!;
     const headers = await this.headers();
     const base = await this.resolveBase();
-    const tabla = `${base}/tables/${encodeURIComponent(graph.tableId)}`;
+    const { tabla: nombreTabla, hoja } = this.tablaYHoja(destino);
+    const tabla = `${base}/tables/${encodeURIComponent(nombreTabla)}`;
 
     const rangeResponse = await fetchWithRetry(`${tabla}/dataBodyRange?$select=rowCount,address`, {
       method: 'GET',
@@ -468,7 +490,6 @@ export class GraphAdapter implements SharePointAdapter {
     }
 
     const range = (await rangeResponse.json()) as { rowCount: number; address: string };
-    const hoja = graph.worksheetName ?? 'Libro No. 2';
     const ultima = Number(range.address.match(/(\d+)$/)?.[1] ?? 0);
     const primera = Math.max(2, ultima - Math.max(RECENT_ROWS, consecutivos.length * 4) + 1);
 
@@ -514,18 +535,24 @@ export class GraphAdapter implements SharePointAdapter {
     return borradas;
   }
 
-  async append(rows: DatabaseRow[]): Promise<AppendOutcome> {
-    const graph = this.config.graph!;
+  async append(
+    rows: (DatabaseRow | AscensoRow)[],
+    destino: RegistroDestino = 'tabla3',
+  ): Promise<AppendOutcome> {
     const headers = await this.headers();
     const base = await this.resolveBase();
-    const matrix = toGraphMatrix(rows);
+    const { tabla: nombreTabla } = this.tablaYHoja(destino);
+    const matrix =
+      destino === 'tabla2'
+        ? toGraphMatrixAscenso(rows as AscensoRow[])
+        : toGraphMatrix(rows as DatabaseRow[]);
 
     let sent = 0;
     for (let start = 0; start < matrix.length; start += INSERT_CHUNK) {
       const chunk = matrix.slice(start, start + INSERT_CHUNK);
 
       const response = await fetchWithRetry(
-        `${base}/tables/${encodeURIComponent(graph.tableId)}/rows/add`,
+        `${base}/tables/${encodeURIComponent(nombreTabla)}/rows/add`,
         {
           method: 'POST',
           headers,
@@ -537,7 +564,12 @@ export class GraphAdapter implements SharePointAdapter {
         const detalle = await describeHttpError(response);
         // El error de Graph no dice cuántas columnas espera: se averigua aparte
         // para no dejar a ciegas cuando el desajuste es de número de columnas.
-        const desajuste = await this.describeColumnMismatch(chunk[0]?.length ?? 0, headers, base);
+        const desajuste = await this.describeColumnMismatch(
+          chunk[0]?.length ?? 0,
+          headers,
+          base,
+          nombreTabla,
+        );
         throw new SharePointError(
           sent === 0
             ? 'SharePoint rechazó la inserción; no se escribió ninguna fila.'
@@ -553,7 +585,7 @@ export class GraphAdapter implements SharePointAdapter {
 
     return {
       rowsSent: sent,
-      message: `${sent} filas anexadas a la tabla ${graph.tableId} en SharePoint.`,
+      message: `${sent} filas anexadas a la tabla ${nombreTabla} en SharePoint.`,
     };
   }
 
@@ -654,19 +686,31 @@ export class WebhookAdapter implements SharePointAdapter {
     );
   }
 
-  async append(rows: DatabaseRow[]): Promise<AppendOutcome> {
+  async append(
+    rows: (DatabaseRow | AscensoRow)[],
+    destino: RegistroDestino = 'tabla3',
+  ): Promise<AppendOutcome> {
     const webhook = this.config.webhook!;
-    const columns = effectiveColumns();
+    const columns = destino === 'tabla2' ? effectiveColumnsAscenso() : effectiveColumns();
+    const valores =
+      destino === 'tabla2'
+        ? toGraphMatrixAscenso(rows as AscensoRow[])
+        : toGraphMatrix(rows as DatabaseRow[]);
 
     const response = await fetchWithRetry(webhook.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(webhook.headers ?? {}) },
       body: JSON.stringify({
-        tabla: 'Tabla3',
-        hoja: 'Libro No. 2',
+        // `destino` le dice a api/registrar.js si este lote va a Tabla3
+        // (Cursos de Extensión, de siempre) o a Tabla2 («Cursos de Ascenso»,
+        // los lotes de Cursos de Ley): cada una vive en su propia hoja, con
+        // su propia numeración de libro/folio/registro.
+        destino,
+        tabla: destino === 'tabla2' ? 'Tabla2' : 'Tabla3',
+        hoja: destino === 'tabla2' ? 'Cursos de Ascenso' : 'Libro No. 2',
         columnas: columns,
         filas: rows,
-        valores: toGraphMatrix(rows),
+        valores,
       }),
     });
 
@@ -756,6 +800,7 @@ export class WebhookAdapter implements SharePointAdapter {
 /* ------------------------------------------------------------------ */
 
 const MOCK_KEY = 'auditor-certificados.mock-tabla3.v1';
+const MOCK_KEY_ASCENSO = 'auditor-certificados.mock-tabla2-ascenso.v1';
 
 /** Filas acumuladas en el modo mock, para poder exportarlas. */
 export function readMockRows(): DatabaseRow[] {
@@ -775,10 +820,45 @@ export function clearMockRows(): void {
   }
 }
 
+/** Igual que `readMockRows`, para los lotes de Cursos de Ley (Tabla2). */
+export function readMockRowsAscenso(): AscensoRow[] {
+  try {
+    const stored = window.localStorage.getItem(MOCK_KEY_ASCENSO);
+    return stored ? (JSON.parse(stored) as AscensoRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearMockRowsAscenso(): void {
+  try {
+    window.localStorage.removeItem(MOCK_KEY_ASCENSO);
+  } catch {
+    // Sin almacenamiento disponible.
+  }
+}
+
 export class MockAdapter implements SharePointAdapter {
   readonly mode: SharePointMode = 'mock';
 
-  async inspect(): Promise<TableInfo> {
+  async inspect(destino: RegistroDestino = 'tabla3'): Promise<TableInfo> {
+    if (destino === 'tabla2') {
+      const storedAscenso = readMockRowsAscenso();
+      const lastAscenso = storedAscenso[storedAscenso.length - 1];
+      return {
+        columns: effectiveColumnsAscenso(),
+        lastPosition: lastAscenso
+          ? {
+              libro: Number(lastAscenso.LIBRO),
+              folio: Number(lastAscenso.FOLIO),
+              registro: Number(lastAscenso['REG.']),
+            }
+          : null,
+        lastConsecutivo: lastAscenso ? Number(lastAscenso.N) : null,
+        recentKeys: [],
+      };
+    }
+
     const stored = readMockRows();
     const last = stored[stored.length - 1];
 
@@ -792,23 +872,31 @@ export class MockAdapter implements SharePointAdapter {
     };
   }
 
-  async deleteByConsecutive(consecutivos: number[]): Promise<number> {
+  async deleteByConsecutive(
+    consecutivos: number[],
+    destino: RegistroDestino = 'tabla3',
+  ): Promise<number> {
     const buscados = new Set(consecutivos.map(Number));
-    const stored = readMockRows();
+    const key = destino === 'tabla2' ? MOCK_KEY_ASCENSO : MOCK_KEY;
+    const stored = destino === 'tabla2' ? readMockRowsAscenso() : readMockRows();
     const quedan = stored.filter((row) => !buscados.has(Number(row.N)));
     try {
-      window.localStorage.setItem(MOCK_KEY, JSON.stringify(quedan));
+      window.localStorage.setItem(key, JSON.stringify(quedan));
     } catch {
       throw new SharePointError('No se pudo actualizar el registro local.');
     }
     return stored.length - quedan.length;
   }
 
-  async append(rows: DatabaseRow[]): Promise<AppendOutcome> {
-    const stored = readMockRows();
+  async append(
+    rows: (DatabaseRow | AscensoRow)[],
+    destino: RegistroDestino = 'tabla3',
+  ): Promise<AppendOutcome> {
+    const key = destino === 'tabla2' ? MOCK_KEY_ASCENSO : MOCK_KEY;
+    const stored = destino === 'tabla2' ? readMockRowsAscenso() : readMockRows();
     const next = [...stored, ...rows];
     try {
-      window.localStorage.setItem(MOCK_KEY, JSON.stringify(next));
+      window.localStorage.setItem(key, JSON.stringify(next));
     } catch {
       throw new SharePointError(
         'No hay espacio en el almacenamiento local del navegador para guardar el lote.',
@@ -821,7 +909,7 @@ export class MockAdapter implements SharePointAdapter {
     return {
       rowsSent: rows.length,
       message:
-        `${rows.length} filas guardadas en el registro local. ` +
+        `${rows.length} filas guardadas en el registro local (${destino === 'tabla2' ? 'Cursos de Ascenso' : 'Cursos de Extensión'}). ` +
         'Configure Microsoft Graph o Power Automate para escribir en SharePoint.',
     };
   }

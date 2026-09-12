@@ -28,7 +28,13 @@ import {
   RANK_SENIORITY,
 } from '../data/names';
 import { XERTIFY_DOC_FORMATS, XERTIFY_GENDERS } from '../data/xertifyParameters';
-import { type CanonicalField, type StudentRow, type ValidationIssue } from '../types';
+import {
+  MODALIDADES_ASCENSO,
+  TIPOS_ASCENSO,
+  type CanonicalField,
+  type StudentRow,
+  type ValidationIssue,
+} from '../types';
 import {
   formatEnglishRange,
   formatSpanish,
@@ -1231,6 +1237,132 @@ function validateFreeText(value: string, field: CanonicalField): ValidationIssue
   return [];
 }
 
+/* -------------------------------------------------------------- */
+/* Propios de la plantilla de Cursos de Ley (→ Tabla2)               */
+/* -------------------------------------------------------------- */
+
+/** Compara ignorando mayúsculas, tildes y espacios sobrantes. */
+function matchesOption(text: string, option: string): boolean {
+  return normalizeKey(text) === normalizeKey(option);
+}
+
+/**
+ * `modalidad` y `tipo`: la tabla de Cursos de Ascenso solo admite un puñado
+ * de valores exactos. Si el que llegó coincide salvo tildes/mayúsculas, se
+ * sugiere la grafía oficial en vez de solo marcar el error.
+ */
+function validateClosedList(
+  value: string,
+  field: CanonicalField,
+  options: readonly string[],
+  etiqueta: string,
+): ValidationIssue[] {
+  const text = collapseSpaces(value);
+  if (!text) return emptyIssue(field);
+
+  if (options.some((option) => option === text)) return [];
+
+  const match = options.find((option) => matchesOption(text, option));
+  if (match) {
+    return [
+      makeIssue(
+        `${field.toUpperCase()}.FORMATO`,
+        field,
+        `${etiqueta} debe escribirse «${match}».`,
+        { suggestion: match },
+      ),
+    ];
+  }
+
+  return [
+    makeIssue(
+      `${field.toUpperCase()}.INVALIDO`,
+      field,
+      `${etiqueta} solo admite: ${options.join(', ')}. Llegó «${text}».`,
+    ),
+  ];
+}
+
+function validateModalidad(value: string): ValidationIssue[] {
+  return validateClosedList(value, 'modalidad', MODALIDADES_ASCENSO, 'La modalidad');
+}
+
+function validateTipoCurso(value: string): ValidationIssue[] {
+  return validateClosedList(value, 'tipo', TIPOS_ASCENSO, 'El tipo');
+}
+
+/**
+ * `promedio`: número entre 0 y 10. La institución lo lleva con 3 decimales
+ * («8.750»); si llega con menos, se sugiere completarlo en vez de rechazarlo
+ * —perder el punto o la coma es un error real, perder un cero de más a la
+ * derecha no cambia el valor—.
+ */
+function validatePromedio(value: string): ValidationIssue[] {
+  const field: CanonicalField = 'promedio';
+  const text = collapseSpaces(value);
+  if (!text) return emptyIssue(field);
+
+  const normalized = text.replace(',', '.');
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) {
+    return [makeIssue('PROMEDIO.INVALIDO', field, 'Debe ser un número entre 0 y 10.')];
+  }
+  if (numeric < 0 || numeric > 10) {
+    return [makeIssue('PROMEDIO.FUERA_DE_RANGO', field, 'Debe estar entre 0 y 10.')];
+  }
+
+  const formateado = numeric.toFixed(3);
+  if (formateado !== normalized) {
+    return [
+      makeIssue('PROMEDIO.FORMATO', field, 'Se lleva con 3 decimales.', {
+        severity: 'warning',
+        suggestion: formateado,
+      }),
+    ];
+  }
+  return [];
+}
+
+/**
+ * `puesto`: formato «puesto/total», p. ej. «1/30». Acepta separadores
+ * comunes de la facultad («1 de 30», «1-30») y sugiere el formato oficial.
+ */
+function validatePuesto(value: string): ValidationIssue[] {
+  const field: CanonicalField = 'puesto';
+  const text = collapseSpaces(value);
+  if (!text) return emptyIssue(field);
+
+  const match = text.match(/^(\d+)\s*(?:\/|-|de)\s*(\d+)$/i);
+  if (!match) {
+    return [
+      makeIssue('PUESTO.FORMATO_INVALIDO', field, 'Debe ir como «puesto/total», p. ej. «1/30».'),
+    ];
+  }
+
+  const [, puestoTexto, totalTexto] = match;
+  const puesto = Number(puestoTexto);
+  const total = Number(totalTexto);
+  const normalizado = `${puesto}/${total}`;
+
+  if (puesto <= 0 || total <= 0) {
+    return [makeIssue('PUESTO.NO_POSITIVO', field, 'El puesto y el total deben ser mayores que cero.')];
+  }
+  if (puesto > total) {
+    return [
+      makeIssue('PUESTO.FUERA_DE_RANGO', field, `El puesto (${puesto}) no puede ser mayor que el total (${total}).`),
+    ];
+  }
+  if (normalizado !== text) {
+    return [
+      makeIssue('PUESTO.FORMATO', field, 'Debe ir como «puesto/total», sin espacios.', {
+        severity: 'warning',
+        suggestion: normalizado,
+      }),
+    ];
+  }
+  return [];
+}
+
 /* ------------------------------------------------------------------ */
 /* Validación de una fila                                               */
 /* ------------------------------------------------------------------ */
@@ -1348,6 +1480,13 @@ export function validateRow(
   if (has('li')) push('li', validateLedger(values.li, 'li'));
   if (has('fo')) push('fo', validateLedger(values.fo, 'fo'));
   if (has('numre')) push('numre', validateLedger(values.numre, 'numre'));
+
+  // Propios de la plantilla de Cursos de Ley (→ Tabla2, «Cursos de Ascenso»).
+  if (has('numerocurso')) push('numerocurso', validateFreeText(values.numerocurso, 'numerocurso'));
+  if (has('modalidad')) push('modalidad', validateModalidad(values.modalidad));
+  if (has('tipo')) push('tipo', validateTipoCurso(values.tipo));
+  if (has('promedio')) push('promedio', validatePromedio(values.promedio));
+  if (has('puesto')) push('puesto', validatePuesto(values.puesto));
 
   return out;
 }

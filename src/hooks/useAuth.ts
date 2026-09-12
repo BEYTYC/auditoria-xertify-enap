@@ -39,8 +39,21 @@ interface PendingCode {
  */
 async function enviarCodigoPorCorreo(email: string, code: string): Promise<boolean> {
   try {
-    const apiKey = loadConfig().webhook?.headers?.['x-api-key'];
-    const resp = await fetch('/api/enviar-codigo', {
+    const config = loadConfig();
+    const apiKey = config.webhook?.headers?.['x-api-key'];
+    // Cuando esta app corre embebida (por ejemplo dentro del Portal, en otro
+    // dominio), una ruta relativa como "/api/enviar-codigo" apunta al
+    // dominio que la sirve, no al de "auditoria-xertify-enap.vercel.app"
+    // donde de verdad vive la función. Se reutiliza el mismo dominio ya
+    // configurado para "URL del flujo" (api/registrar) — están en el mismo
+    // proyecto de Vercel — y si todavía no se ha configurado nada, se cae de
+    // vuelta a la ruta relativa (funciona cuando la app corre en su propio
+    // dominio, como antes).
+    const webhookUrl = config.webhook?.url;
+    const endpoint = webhookUrl
+      ? new URL('/api/enviar-codigo', webhookUrl).toString()
+      : '/api/enviar-codigo';
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

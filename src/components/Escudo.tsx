@@ -58,12 +58,16 @@ export function Escudo({ height = 56, variant = 'color', className = '' }: Escud
  * `aria-hidden` porque es decorativa, y sin eventos para no estorbar al usuario.
  */
 export function MarcaDeAgua() {
+  // `escudo-marca-agua.png` (no `escudo.png`): es la versión ampliada 3× con
+  // reescalado Lanczos y enfoque suave — se ve nítida a este tamaño grande,
+  // donde el escudo pequeño de la cabecera se vería borroso. Ya trae su
+  // propia transparencia, así que casi no hace falta opacidad extra encima.
   return (
     <div
       aria-hidden
       className="pointer-events-none fixed inset-0 -z-10 flex items-center justify-center overflow-hidden"
     >
-      <img src={escudoColor} alt="" className="w-[min(72vw,640px)] max-w-none opacity-[0.05]" />
+      <img src={escudoMarcaDeAgua} alt="" className="w-[min(60vw,760px)] max-w-none opacity-[0.14]" />
     </div>
   );
 }

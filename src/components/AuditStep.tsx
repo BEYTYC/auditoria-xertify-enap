@@ -311,7 +311,7 @@ function OfficePanel({
   const correoValido = EMAIL_PATTERN.test(metadata.correoResponsable.trim());
 
   return (
-    <section className="card p-4 text-left">
+    <section className="card mt-3 p-4 text-left">
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="oficina">

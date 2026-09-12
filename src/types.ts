@@ -69,6 +69,15 @@ export const CANONICAL_FIELDS = [
   'li',
   'fo',
   'numre',
+  // Propios de la plantilla de Cursos de Ley: ese lote no se registra en
+  // Tabla3 sino en Tabla2 («Cursos de Ascenso»), que trae estas cinco
+  // columnas adicionales. Ver databaseService.ts (buildAscensoRows) y
+  // registryService.ts (destino según la plantilla).
+  'numerocurso',
+  'modalidad',
+  'tipo',
+  'promedio',
+  'puesto',
 ] as const;
 
 export type CanonicalField = (typeof CANONICAL_FIELDS)[number];
@@ -278,6 +287,64 @@ export type DbColumn = (typeof DB_COLUMNS)[number];
 export type DatabaseRow = Record<DbColumn, string | number | null>;
 
 /* ------------------------------------------------------------------ */
+/* Filas que se anexan a Tabla2 (Base de Datos, hoja «Cursos de Ascenso»)*/
+/* ------------------------------------------------------------------ */
+
+/**
+ * Los lotes registrados con la plantilla de Cursos de Ley no van a Tabla3:
+ * la institución los asienta en el mismo archivo, hoja «Cursos de Ascenso»,
+ * tabla `Tabla2`, con su propia numeración de libro/folio/registro y cinco
+ * columnas propias (NUMERO DE CURSO, MODALIDAD, TIPO, PROMEDIO, PUESTO
+ * GENERAL) que Tabla3 no tiene. Orden confirmado por la Oficina de
+ * Estadística — igual que en `DB_COLUMNS`, el orden importa porque Graph
+ * inserta por posición.
+ */
+export const DB_COLUMNS_ASCENSO = [
+  'N',
+  'LIBRO',
+  'FOLIO',
+  'REG.',
+  'APELLIDOS',
+  'NOMBRES',
+  'APELLIDOS Y NOMBRES',
+  'DOCUMENTO DE IDENTIDAD',
+  'LUGAR EXPEDICION',
+  'PROMEDIO',
+  'PUESTO GENERAL',
+  'NOMBRE DEL CURSO',
+  'NUMERO DE CURSO',
+  'MODALIDAD',
+  'TIPO',
+  'FECHA INICIO',
+  'FECHA FINALIZACION',
+  'FECHA DE REGISTRO',
+  'AÑO',
+  'SEM',
+  'OFICINA RESPONSABLE',
+] as const;
+
+export type DbColumnAscenso = (typeof DB_COLUMNS_ASCENSO)[number];
+
+/** Una fila lista para insertarse en Tabla2 («Cursos de Ascenso»). */
+export type AscensoRow = Record<DbColumnAscenso, string | number | null>;
+
+/** Valores válidos de la columna `MODALIDAD` de Tabla2. */
+export const MODALIDADES_ASCENSO = ['Presencial', 'A distancia', 'Sincrónico'] as const;
+export type ModalidadAscenso = (typeof MODALIDADES_ASCENSO)[number];
+
+/** Valores válidos de la columna `TIPO` de Tabla2. */
+export const TIPOS_ASCENSO = ['Línea', 'Administrativo'] as const;
+export type TipoAscenso = (typeof TIPOS_ASCENSO)[number];
+
+/**
+ * A qué libro va el lote. `tabla3` es Cursos de Extensión (el de siempre);
+ * `tabla2` es «Cursos de Ascenso», donde se asientan los lotes auditados con
+ * la plantilla de Cursos de Ley — mismo archivo, otra hoja, numeración de
+ * libro/folio/registro propia e independiente.
+ */
+export type RegistroDestino = 'tabla3' | 'tabla2';
+
+/* ------------------------------------------------------------------ */
 /* Comprobante del lote                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -413,8 +480,15 @@ export interface LogEntry {
   outcome: RegistrationOutcome;
   mode: SharePointMode;
   syncedToSharePoint: boolean;
-  /** Filas de Tabla3 generadas, para reexportar el lote si hace falta. */
-  rows?: DatabaseRow[];
+  /**
+   * A qué libro se registró: Tabla3 (Cursos de Extensión) si falta —así
+   * quedaron todos los lotes de antes de este campo— o Tabla2 («Cursos de
+   * Ascenso») para los lotes de Cursos de Ley. Al anular, dice de cuál de
+   * los dos libros hay que borrar las filas.
+   */
+  destino?: RegistroDestino;
+  /** Filas generadas (de Tabla3 o de Tabla2, según `destino`), para reexportar el lote si hace falta. */
+  rows?: DatabaseRow[] | AscensoRow[];
   /** `true` si la Oficina de Estadística anuló el registro en el libro. */
   anulado?: boolean;
   /** Nombre del archivo corregido que se entregó a la facultad. */

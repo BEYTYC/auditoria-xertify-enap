@@ -27,7 +27,12 @@ export type FieldKind =
   | 'docformato'
   | 'numero'
   | 'ledger'
-  | 'libre';
+  | 'libre'
+  // Propios de la plantilla de Cursos de Ley (→ Tabla2, «Cursos de Ascenso»).
+  | 'modalidad'
+  | 'tipo-curso'
+  | 'promedio'
+  | 'puesto';
 
 export interface FieldSpec {
   field: CanonicalField;
@@ -333,6 +338,57 @@ export const FIELD_SPECS: Record<CanonicalField, FieldSpec> = {
     kind: 'ledger',
     aliases: ['numre', 'registro', 'numero registro', 'num registro', 'reg'],
     width: 90,
+  },
+
+  /* -------------------------------------------------------------- */
+  /* Propios de la plantilla de Cursos de Ley (→ Tabla2)               */
+  /* -------------------------------------------------------------- */
+  numerocurso: {
+    field: 'numerocurso',
+    header: 'numerocurso',
+    // Alimenta NUMERO DE CURSO en Tabla2 («Cursos de Ascenso»).
+    label: 'Número de curso (→ NUMERO DE CURSO)',
+    requirement: 'opcional',
+    kind: 'texto',
+    aliases: ['numerocurso', 'numero de curso', 'numero curso', 'no de curso'],
+    width: 150,
+  },
+  modalidad: {
+    field: 'modalidad',
+    header: 'modalidad',
+    label: 'Modalidad',
+    requirement: 'opcional',
+    kind: 'modalidad',
+    aliases: ['modalidad'],
+    width: 140,
+  },
+  tipo: {
+    field: 'tipo',
+    header: 'tipo',
+    label: 'Tipo',
+    requirement: 'opcional',
+    kind: 'tipo-curso',
+    aliases: ['tipo'],
+    width: 140,
+  },
+  promedio: {
+    field: 'promedio',
+    header: 'promedio',
+    label: 'Promedio',
+    requirement: 'opcional',
+    kind: 'promedio',
+    aliases: ['promedio', 'promedio final', 'promedio academico'],
+    width: 110,
+  },
+  puesto: {
+    field: 'puesto',
+    header: 'puesto',
+    // Alimenta PUESTO GENERAL en Tabla2, formato «1/30» (puesto/total).
+    label: 'Puesto (→ PUESTO GENERAL)',
+    requirement: 'opcional',
+    kind: 'puesto',
+    aliases: ['puesto', 'puesto general', 'puesto obtenido'],
+    width: 120,
   },
 };
 
