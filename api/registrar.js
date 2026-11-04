@@ -1,51 +1,24 @@
 /**
  * api/registrar.js
  *
- * Reemplazo gratuito de Power Automate: recibe exactamente el mismo JSON que
- * el modo "webhook" de la app ya envía (ver src/services/sharepointService.ts,
- * clase WebhookAdapter) y hace ella misma, sin que nadie inicie sesión, lo
- * que iba a hacer el flujo:
- *   1. Escribir el lote en Tabla3 del Excel real (Excel Online / Microsoft
- *      Graph, con permisos de "aplicación" — no de una persona).
- *   2. Mandar el correo de confirmación al responsable.
+ * Recibe el lote de la app de Auditoría Xertify, escribe en la Tabla del Excel
+ * (Microsoft Graph, permisos de aplicación) y envía el correo de confirmación.
  *
- * No cambia nada del front-end: en el panel de Administración de la app
- * (⚙ → modo "Power Automate") se pega la URL de este mismo endpoint, por
- * ejemplo:
- *   https://auditoria-xertify.vercel.app/api/registrar
- * en vez de la URL de Power Automate.
+ * Variables de entorno (Vercel → Settings → Environment Variables):
+ *   GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_UPN_DRIVE,
+ *   GRAPH_RUTA_ARCHIVO, GRAPH_TABLE_ID (opcional, "Tabla3"), GRAPH_WORKSHEET
+ *   (opcional, "Libro No. 2"), GRAPH_MAIL_FROM, API_KEY (opcional).
  *
- * Variables de entorno que necesita este archivo (se configuran en Vercel,
- * Project Settings → Environment Variables — NUNCA con prefijo VITE_, para
- * que no terminen expuestas en el navegador):
- *
- *   GRAPH_TENANT_ID       Id. de directorio (tenant) de Entra ID.
- *   GRAPH_CLIENT_ID       Id. de aplicación (cliente) del App Registration.
- *   GRAPH_CLIENT_SECRET   Secreto de cliente creado para ese registro
- *                         (Certificados y secretos → Nuevo secreto de cliente).
- *   GRAPH_UPN_DRIVE       Correo de la cuenta dueña del OneDrive donde vive
- *                         el Excel real, por ejemplo
- *                         jestadisticaplen@enap.edu.co. NO hace falta ir a
- *                         buscar ningún identificador largo: la función
- *                         resuelve sola el archivo a partir de esta cuenta y
- *                         la ruta de abajo, igual que hace el Portal de
- *                         Solicitud de Certificados.
- *   GRAPH_RUTA_ARCHIVO   Ruta del archivo .xlsx dentro de ese OneDrive, por
- *                         ejemplo "Estadística/Bases de Datos/BD Cursos de
- *                         Ley - Cursos de Extensión/Base de Datos Cursos de
- *                         Extensión.xlsx".
- *   GRAPH_TABLE_ID        Nombre de la tabla (por defecto "Tabla3").
- *   GRAPH_MAIL_FROM       Cuenta desde la que debe salir el correo, por
- *                         ejemplo jestadisticaplen@enap.edu.co.
- *   API_KEY               (opcional pero recomendado) clave compartida; la
- *                         app la manda como cabecera x-api-key cuando se
- *                         configura VITE_WEBHOOK_KEY en la app. Si se define
- *                         aquí, cualquier solicitud sin la clave correcta se
- *                         rechaza — así nadie más en internet puede escribir
- *                         en el Excel solo por conocer la URL.
- *
- * Ver GUIA-FUNCION-GRATIS-SIN-POWER-AUTOMATE.md para el paso a paso completo
- * de cómo obtener y cargar cada uno de estos valores.
+ * CAMBIOS DE ESTA VERSIÓN
+ *  - El "turno" (.registro-en-curso.lock) ahora CADUCA: si una ejecución anterior
+ *    murió sin borrarlo (por ejemplo, Vercel cortó la función por tiempo), el
+ *    archivo quedaba para siempre y TODOS los registros siguientes fallaban.
+ *    Ahora, si el turno tiene más de 45 s, se considera abandonado y se borra.
+ *  - Se reduce el tiempo máximo de espera por el turno (~9 s) para no pasar el
+ *    límite de duración de la función de Vercel.
+ *  - La numeración (libro/folio/registro) solo se asigna y devuelve cuando Excel
+ *    confirmó la escritura. Si falla, la respuesta trae solo `error` (sin
+ *    numeración): el front-end no debe mostrar folio en ese caso.
  */
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
@@ -104,14 +77,7 @@ function escapeHtml(value) {
   ));
 }
 
-// Igual que idArchivoRegistro_() en el Portal de Certificados: el archivo se
-// resuelve una sola vez (cuenta dueña + ruta) y se recuerda en memoria — así
-// configurar esto es poner un correo y una ruta, no ir a buscar
-// identificadores en Graph Explorer. Se cachea a nivel de módulo porque una
-// misma función de Vercel suele atender varias solicitudes seguidas sin
-// reiniciarse ("instancia caliente"); si Vercel arranca una instancia nueva,
-// simplemente se vuelve a resolver una vez más.
-let cachedFileRef = null; // { driveId, itemId }
+let cachedFileRef = null; // { driveId, itemId, parentId }
 
 function rutaDrive() {
   const upn = process.env.GRAPH_UPN_DRIVE;
@@ -145,9 +111,6 @@ async function resolverArchivo() {
   cachedFileRef = {
     driveId: data.parentReference.driveId,
     itemId: data.id,
-    // Carpeta donde vive el archivo: aquí se crea el archivo de turno (ver
-    // adquirirBloqueo) para que dos registros casi simultáneos no calculen el
-    // mismo folio/registro.
     parentId: data.parentReference.id,
   };
   return cachedFileRef;
@@ -156,28 +119,10 @@ async function resolverArchivo() {
 /* -------------------------------------------------------------------- */
 /* Numeración institucional del libro (LIBRO / FOLIO / REGISTRO / N)      */
 /* -------------------------------------------------------------------- */
-//
-// Antes, cada navegador calculaba esta numeración por su cuenta a partir de
-// lo último que él mismo había leído (o, si nunca lo había leído, de un
-// valor de arranque fijo en el código). Cuando dos personas registraban
-// —incluso sin coincidir en el segundo exacto: bastaba con que cada una
-// abriera la app en su propio equipo sin haber registrado antes ahí—, las
-// dos partían del mismo punto y el libro terminaba con el mismo folio/
-// registro repetido para dos lotes distintos (el caso reportado: el 11477
-// libro 3 folio 99 registro 55 salió dos veces, con personas distintas).
-//
-// La solución: quien de verdad sabe cuál es la última fila es el Excel
-// mismo, así que ahora es este servidor —justo antes de escribir, y con un
-// turno para que nadie más escriba al mismo tiempo— el que relee la última
-// fila y asigna los números. El navegador sigue mandando su propio cálculo
-// (para mostrar el comprobante mientras espera la respuesta), pero el que
-// manda es el que se calcula aquí; se le devuelve al navegador para que
-// corrija el comprobante, la bitácora y la plantilla adjunta si hacía falta.
 
 const MAX_FOLIO = 99;
 const MAX_REGISTRO = 99;
 
-/** Posición de arranque si el libro está vacío o no se pudo leer. */
 const POSICION_INICIAL = { libro: 3, folio: 99, registro: 54 };
 const CONSECUTIVO_INICIAL = 11476;
 
@@ -191,18 +136,6 @@ function siguientePosicion(posicion) {
   return { libro: posicion.libro + 1, folio: 1, registro: 1 };
 }
 
-/**
- * Tabla y hoja reales según el destino que ya calculó el front-end
- * (WebhookAdapter.append, en sharepointService.ts): "tabla2" es Tabla2 /
- * «Cursos de Ascenso» (lotes de Cursos de Ley, 21 columnas); cualquier otro
- * valor — incluido "tabla3" o si no viene el campo, por compatibilidad con
- * llamadas antiguas — es Tabla3 / «Libro No. 2» (20 columnas). Antes esta
- * función siempre usaba Tabla3/Libro No. 2 sin importar el destino, así que
- * un lote de Cursos de Ley terminaba con sus 21 columnas escritas contra
- * Tabla3 (que solo tiene 20) y Excel Online lo rechazaba con "El número de
- * filas o columnas de la matriz de entrada no coincide con el tamaño o las
- * dimensiones del rango."
- */
 function tablaYHojaDe(payload) {
   if (payload.destino === 'tabla2') {
     return { tabla: 'Tabla2', hoja: 'Cursos de Ascenso' };
@@ -213,7 +146,6 @@ function tablaYHojaDe(payload) {
   };
 }
 
-/** Relee la última fila real de la tabla: libro/folio/registro/consecutivo. */
 async function leerUltimaPosicion(driveId, itemId, tabla, hoja) {
   const base = `/drives/${driveId}/items/${itemId}/workbook`;
 
@@ -240,21 +172,36 @@ async function leerUltimaPosicion(driveId, itemId, tabla, hoja) {
 }
 
 /* -------------------------------------------------------------------- */
-/* Turno: evita que dos registros casi simultáneos se pisen                */
+/* Turno (con caducidad)                                                  */
 /* -------------------------------------------------------------------- */
-//
-// Microsoft Graph no ofrece un "bloqueo" de verdad para Excel, así que se usa
-// un truco conocido: crear un archivo de 0 bytes con
-// `@microsoft.graph.conflictBehavior: "fail"` es una operación atómica —si
-// ya existe, Graph responde 409 en vez de crear un duplicado—. Mientras ese
-// archivo exista, nadie más puede "tomar el turno"; al terminar de escribir,
-// se borra para que el siguiente pueda entrar.
 
 const NOMBRE_TURNO = '.registro-en-curso.lock';
+const TURNO_CADUCA_MS = 45_000; // un registro normal tarda unos pocos segundos
+const INTENTOS_TURNO = 14;      // ~14 × (0.3–0.8 s) ≈ 9 s, dentro del límite de Vercel
+
+/** Si el archivo de turno lleva más de TURNO_CADUCA_MS, quedó abandonado: se borra. */
+async function limpiarTurnoAbandonado(driveId, parentId) {
+  try {
+    const resp = await graphFetch(
+      `/drives/${driveId}/items/${parentId}:/${encodeURIComponent(NOMBRE_TURNO)}` +
+        '?$select=id,createdDateTime,lastModifiedDateTime',
+    );
+    if (resp.status === 404) return true; // ya no existe: se puede reintentar de inmediato
+    if (!resp.ok) return false;
+    const item = await resp.json();
+    const desde = Date.parse(item.lastModifiedDateTime || item.createdDateTime || '');
+    if (Number.isFinite(desde) && Date.now() - desde > TURNO_CADUCA_MS) {
+      const del = await graphFetch(`/drives/${driveId}/items/${item.id}`, { method: 'DELETE' });
+      return del.ok || del.status === 404;
+    }
+  } catch {
+    // si no se puede revisar, simplemente se sigue esperando
+  }
+  return false;
+}
 
 async function adquirirTurno(driveId, parentId) {
-  const intentosMax = 25;
-  for (let intento = 0; intento < intentosMax; intento += 1) {
+  for (let intento = 0; intento < INTENTOS_TURNO; intento += 1) {
     const resp = await graphFetch(`/drives/${driveId}/items/${parentId}/children`, {
       method: 'POST',
       body: JSON.stringify({
@@ -273,9 +220,9 @@ async function adquirirTurno(driveId, parentId) {
       error.detail = await resp.text();
       throw error;
     }
-    // Otro registro tiene el turno: espera un poco (con variación, para que
-    // dos solicitudes que llegaron juntas no reintenten en el mismo instante)
-    // y vuelve a intentar.
+    // Otro registro tiene el turno. Si ese turno quedó abandonado, se limpia
+    // y se reintenta enseguida.
+    if (await limpiarTurnoAbandonado(driveId, parentId)) continue;
     await new Promise((resolve) => setTimeout(resolve, 300 + Math.random() * 500));
   }
 
@@ -292,10 +239,7 @@ async function liberarTurno(driveId, lockItemId) {
   try {
     await graphFetch(`/drives/${driveId}/items/${lockItemId}`, { method: 'DELETE' });
   } catch {
-    // Si el borrado falla, el siguiente registro esperará un poco más de la
-    // cuenta la próxima vez que lea este archivo con conflictBehavior=fail,
-    // pero no debe verse como si el registro que sí se acaba de completar
-    // hubiera fallado.
+    // ver limpiarTurnoAbandonado: un turno que no se borró caduca solo.
   }
 }
 
@@ -316,17 +260,9 @@ async function escribirLote(payload) {
 
   const { driveId, itemId, parentId } = await resolverArchivo();
 
-  // Turno: mientras este lote no termine de escribirse, nadie más puede
-  // entrar a leer-y-escribir la numeración (ver comentario arriba de
-  // `adquirirTurno`). Así dos registros casi simultáneos no calculan el
-  // mismo folio/registro.
   const lockItemId = await adquirirTurno(driveId, parentId);
 
   try {
-    // La numeración que mandó el navegador (columnas 0-3 de cada fila: N,
-    // LIBRO, FOLIO, REGISTRO) es solo su mejor cálculo con lo último que él
-    // sabía; aquí se descarta y se vuelve a calcular con la última fila real
-    // del libro, leída con el turno ya tomado.
     const ultima = await leerUltimaPosicion(driveId, itemId, tabla, hoja);
     const posicionPrevia = ultima?.posicion ?? POSICION_INICIAL;
     const consecutivoPrevio = ultima?.consecutivo ?? CONSECUTIVO_INICIAL;
@@ -357,10 +293,6 @@ async function escribirLote(payload) {
 
     return {
       rowsSent: asignados.length,
-      // Con esto la app recalcula, del lado del navegador, el mismo rango
-      // exacto que se acaba de escribir aquí (misma fórmula, mismo punto de
-      // partida) y corrige el comprobante, la bitácora y la plantilla
-      // adjunta si habían quedado con la numeración vieja.
       numeracion: {
         previoPosicion: posicionPrevia,
         previoConsecutivo: consecutivoPrevio,
@@ -401,9 +333,6 @@ async function enviarCorreo(payload) {
         `,
       },
       toRecipients: [{ emailAddress: { address: payload.correoResponsable } }],
-      // La app manda la plantilla ya con el registro asentado, codificada en
-      // base64, en `payload.attachment`. Si por algún motivo no llegó, el
-      // correo se manda igual, solo que sin adjunto.
       ...(payload.attachment
         ? {
             attachments: [
@@ -434,15 +363,6 @@ async function enviarCorreo(payload) {
   }
 }
 
-/**
- * CORS: esta función se llama desde el dominio del PORTAL (o desde el que
- * sea, embebido en un iframe) — nunca desde el mismo dominio que
- * `auditoria-xertify-enap.vercel.app` — así que sin estos encabezados el
- * navegador bloquea la respuesta antes de que la app la vea y todo parece
- * "Failed to fetch" aunque la función haya funcionado bien. `*` es seguro
- * aquí porque el único secreto real es la propia `API_KEY`, que igual se
- * exige por encabezado y nunca queda visible en el navegador de nadie más.
- */
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -453,7 +373,6 @@ export default async function handler(req, res) {
   setCors(res);
 
   if (req.method === 'OPTIONS') {
-    // Preflight: el navegador pregunta antes del POST real si tiene permiso.
     res.status(204).end();
     return;
   }
@@ -483,6 +402,7 @@ export default async function handler(req, res) {
   } catch (error) {
     const status = error && error.status ? error.status : 500;
     res.status(status).json({
+      ok: false,
       error: error instanceof Error ? error.message : String(error),
       detail: error && error.detail ? error.detail : undefined,
     });
