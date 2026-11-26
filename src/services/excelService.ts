@@ -208,7 +208,11 @@ export async function readTemplate(file: File): Promise<ParsedTemplate> {
 
   const missingRequired = FIELD_LIST.filter(
     (spec) =>
-      spec.requirement !== 'opcional' && !spec.columnOptional && !activeFields.has(spec.field),
+      !activeFields.has(spec.field) &&
+      !spec.columnOptional &&
+      (spec.requirement !== 'opcional' ||
+        // Cursos de ley (traen `numerocurso`): promedio y puesto son obligatorios.
+        (activeFields.has('numerocurso') && (spec.field === 'promedio' || spec.field === 'puesto'))),
   ).map((spec) => spec.field);
 
   const seenHeaders = new Set<string>();
@@ -295,7 +299,11 @@ export function remapColumn(
 
   const missingRequired = FIELD_LIST.filter(
     (spec) =>
-      spec.requirement !== 'opcional' && !spec.columnOptional && !activeFields.has(spec.field),
+      !activeFields.has(spec.field) &&
+      !spec.columnOptional &&
+      (spec.requirement !== 'opcional' ||
+        // Cursos de ley (traen `numerocurso`): promedio y puesto son obligatorios.
+        (activeFields.has('numerocurso') && (spec.field === 'promedio' || spec.field === 'puesto'))),
   ).map((spec) => spec.field);
 
   return {

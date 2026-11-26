@@ -1297,10 +1297,14 @@ function validateTipoCurso(value: string): ValidationIssue[] {
  * —perder el punto o la coma es un error real, perder un cero de más a la
  * derecha no cambia el valor—.
  */
-function validatePromedio(value: string): ValidationIssue[] {
+function validatePromedio(value: string, exigido = false): ValidationIssue[] {
   const field: CanonicalField = 'promedio';
   const text = collapseSpaces(value);
-  if (!text) return emptyIssue(field);
+  if (!text) {
+    return exigido
+      ? [makeIssue('CAMPO.VACIO', field, 'Está vacío. En los cursos de ley el promedio es obligatorio.', { severity: 'error' })]
+      : emptyIssue(field);
+  }
 
   const normalized = text.replace(',', '.');
   const numeric = Number(normalized);
@@ -1327,10 +1331,14 @@ function validatePromedio(value: string): ValidationIssue[] {
  * `puesto`: formato «puesto/total», p. ej. «1/30». Acepta separadores
  * comunes de la facultad («1 de 30», «1-30») y sugiere el formato oficial.
  */
-function validatePuesto(value: string): ValidationIssue[] {
+function validatePuesto(value: string, exigido = false): ValidationIssue[] {
   const field: CanonicalField = 'puesto';
   const text = collapseSpaces(value);
-  if (!text) return emptyIssue(field);
+  if (!text) {
+    return exigido
+      ? [makeIssue('CAMPO.VACIO', field, 'Está vacío. En los cursos de ley el puesto es obligatorio.', { severity: 'error' })]
+      : emptyIssue(field);
+  }
 
   const match = text.match(/^(\d+)\s*(?:\/|-|de)\s*(\d+)$/i);
   if (!match) {
@@ -1485,8 +1493,10 @@ export function validateRow(
   if (has('numerocurso')) push('numerocurso', validateFreeText(values.numerocurso, 'numerocurso'));
   if (has('modalidad')) push('modalidad', validateModalidad(values.modalidad));
   if (has('tipo')) push('tipo', validateTipoCurso(values.tipo));
-  if (has('promedio')) push('promedio', validatePromedio(values.promedio));
-  if (has('puesto')) push('puesto', validatePuesto(values.puesto));
+  // En los cursos de ley (la plantilla que trae `numerocurso`) el promedio y el puesto son obligatorios.
+  const esCursoDeLey = has('numerocurso');
+  if (has('promedio')) push('promedio', validatePromedio(values.promedio, esCursoDeLey));
+  if (has('puesto')) push('puesto', validatePuesto(values.puesto, esCursoDeLey));
 
   return out;
 }
