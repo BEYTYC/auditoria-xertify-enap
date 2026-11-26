@@ -291,6 +291,14 @@ function Receipt({
               )}
 
               {ok && (
+                <p className="mt-3 text-[12px] text-slate-600">
+                  Este registro certifica que la plantilla superó las reglas de validación del cargue.
+                  La verificación de la información asociada a los datos registrados es responsabilidad
+                  de la dependencia que solicita el registro.
+                </p>
+              )}
+
+              {ok && (
                 <p
                   className={[
                     'mt-3 flex items-center gap-1.5 text-[12px]',

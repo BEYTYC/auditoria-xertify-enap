@@ -320,10 +320,9 @@ async function enviarCorreo(payload) {
           <b>${escapeHtml(payload.curso)}</b> quedó registrado oficialmente en el Libro de
           Registro de Cursos de Extensión de la Escuela Naval de Cadetes "Almirante Padilla".</p>
           <p>Número de registro: <b>${escapeHtml(payload.idRegistro)}</b></p>
-          <p>Este registro certifica que la información de los graduados fue verificada y
-          consignada en la base de datos institucional. Si encuentra alguna inconsistencia en
-          los datos registrados, por favor comuníquese con la Oficina de Estadística a la
-          brevedad para su corrección.</p>
+          <p>Este registro certifica que la plantilla superó las reglas de validación del
+          cargue. La verificación de la información asociada a los datos registrados es
+          responsabilidad de la dependencia que solicita el registro.</p>
           <p>Cordialmente,<br/>
           PD02 Beyty P. Camargo M.<br/>
           Jefe de Estadística<br/>
