@@ -1178,3 +1178,26 @@ describe('el «de» del año en un rango es opcional', () => {
     );
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* Cursos de ley: promedio y puesto son obligatorios                    */
+/* ------------------------------------------------------------------ */
+
+describe('cursos de ley: promedio y puesto obligatorios', () => {
+  it('con numerocurso, promedio y puesto vacíos son error', () => {
+    expect(codesFor({ numerocurso: '12' }, 'promedio')).toContain('CAMPO.VACIO');
+    expect(codesFor({ numerocurso: '12' }, 'puesto')).toContain('CAMPO.VACIO');
+  });
+
+  it('con valores correctos no hay error', () => {
+    expect(codesFor({ numerocurso: '12', promedio: '8.750', puesto: '3/30' }, 'promedio')).toEqual([]);
+    expect(codesFor({ numerocurso: '12', promedio: '8.750', puesto: '3/30' }, 'puesto')).toEqual([]);
+  });
+
+  it('sin numerocurso siguen siendo opcionales', () => {
+    const fields = new Set<CanonicalField>(['promedio', 'puesto']);
+    const issues = validateRow(values({}), fields, new Set());
+    expect(issues.promedio ?? []).toEqual([]);
+    expect(issues.puesto ?? []).toEqual([]);
+  });
+});
